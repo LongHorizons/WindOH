@@ -461,10 +461,28 @@ irm https://raw.githubusercontent.com/LongHorizons/WindOH/main/LessToil/plugin/i
 
 ## Author
 
-Designed, architected, and implemented as an integrated system spanning: Rust systems programming (three independent binaries), TypeScript full-stack development (Next.js + MongoDB + Redis), Python developer tooling (Claude Code plugin), AI/LLM integration (structured prompting + Markov modeling), Windows internals (ETW, TDH, DPAPI, kernel providers, PE parsing), cryptographic engineering (deterministic tokenization, HKDF, AES-256-GCM), and security operations (detection engineering, incident response, memory forensics, threat intelligence).
+WindOH was designed, architected, and built by a single engineer as an integrated platform spanning the full security operations lifecycle. The work encompasses:
+
+- **Rust systems programming** — Three independent, self-contained binaries: a real-time ETW telemetry agent with cryptographic behavioral tokenization, a parallel memory forensics launcher with embedded Volatility 3 and Python 3.9, and a covert forensic triage tool embedding KAPE, PsExec, Hayabusa, and the Eric Zimmerman tool suite.
+- **TypeScript full-stack development** — A Next.js 14 behavioral intelligence application with tRPC API layer, MongoDB persistence, BullMQ job orchestration, local LLM integration, Markov chain sequence modeling, Atomic Red Team coverage mapping, and SearXNG threat intel correlation.
+- **Python developer tooling** — A 40-module, 56-language Claude Code plugin with 26-table SQLite knowledge graph, tree-sitter AST parsing, SimHash duplicate detection, 10-phase edit verification pipeline, and architectural governance enforcement.
+- **AI/LLM integration** — Structured prompt engineering for behavioral enrichment, first-order Markov transition modeling with surprise scoring, permanent enrichment caching, and a provider-abstracted local inference architecture.
+- **Windows internals** — Native ETW Trace Data Helper (TDH) API, 47 kernel and user-mode providers, DPAPI key protection, PE header parsing, process genealogy reconstruction from PEB and logon session data.
+- **Cryptographic engineering** — Deterministic SHA-256 behavioral tokenization with stable/payload hash separation, HKDF-SHA256 key derivation with purpose binding, AES-256-GCM encryption at rest, Count-Min Sketch probabilistic baselining with exponential decay.
+- **Security operations** — Detection engineering, incident response, memory forensics at scale, cross-case threat actor attribution, adversary emulation coverage analysis, and operational stealth design for forensic collection.
 
 ---
 
-## License
+## Disclaimer
 
-MIT
+These tools are provided as-is, without warranty of any kind, express or implied. No license is granted. All rights reserved.
+
+These are security tools — they interact with the Windows kernel, capture forensic artifacts, execute code on remote systems, and process sensitive telemetry. Use of these tools may carry operational, legal, and compliance risk. You are solely responsible for:
+
+- Ensuring you have authorization to deploy these tools on any system you target
+- Complying with applicable laws, regulations, and organizational policies in your jurisdiction
+- Understanding the data these tools collect, where that data is stored, and who has access to it
+- Validating that the binaries you run match the hashes published in this repository
+- Accepting that the author provides no support, no guarantees of fitness for any purpose, and no liability for any consequence of their use
+
+By downloading, installing, or using any component of this platform, you acknowledge that you assume all risk and responsibility.
