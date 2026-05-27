@@ -93,6 +93,53 @@ Detection:     "Is this new?"                   "This stable token has
 
 **Decay-weighted baselining** means frequency isn't just a count — it's recency-aware. A behavior that happened 10,000 times last year but zero times this month has a lower score than one that happened 100 times this week. The baseline continuously self-calibrates.
 
+### Idempotency Across the Fleet: Same Behavior, Same Token, Everywhere
+
+The tokenization design solves a problem most SIEM pipelines don't even acknowledge: **event identity is not behavioral identity**. A process start event on Host A at 9:05 AM and the same logical operation on Host B at 3:22 PM are one behavior — but raw telemetry pipelines store them as two unrelated rows.
+
+LongHorizons collapses them into one token. Here's how.
+
+**Volatile field stripping.** Before hashing, every field that could differ between two instances of the same behavior is removed:
+
+| Stripped (volatile) | Retained (behavioral skeleton) |
+|---|---|
+| Process ID, Thread ID, Handle | Event type, Operation, Category |
+| Timestamp, boot time | Process image path, Parent image path |
+| Command-line arguments | Ancestor chain hash (SHA-256 of image lineage) |
+| Source/destination IP addresses | Tree depth (parent → grandparent distance) |
+| File paths, registry key paths | Signing status (signed/unsigned/Microsoft) |
+| DNS query strings | Integrity level, Logon type |
+| Session ID, logon GUID | Behavioral tags (11 boolean heuristics) |
+
+The hash is computed over the behavioral skeleton — the *shape* of the activity, not the specific data that flowed through it. Two instances of `cmd.exe → whoami.exe` running as LocalSystem from `C:\Windows\System32` with the same ancestor chain produce the same `stable_hash` regardless of which host they ran on, which user triggered them, or when they occurred.
+
+**What this enables:**
+
+- **One enrichment, fleet-wide.** When WindOH enriches a `stable_hash` — generating a description, MITRE mappings, risk assessment, and investigation steps — that enrichment applies to every host that ever exhibits the behavior. The LLM runs once per behavior, not once per host or once per occurrence. For a 1,000-endpoint fleet, that's the difference between 1,000 LLM calls for the same behavior and exactly 1.
+
+- **Cross-host comparison as a hash join.** "Show me every host that executed this behavioral pattern" is a single indexed lookup on `stable_hash`. No multi-field text queries across process names, command lines, and timestamps. No correlation rules to maintain. One hash, one query, instant results.
+
+- **Rarity scored globally, not per host.** A behavior that appears once on one host is rare. A behavior that appears 50,000 times across 800 hosts is common. The Count-Min Sketch and decay scoring operate on the global frequency — not the per-host frequency. An attacker can't hide by spreading activity across many endpoints; the system sees the aggregate.
+
+- **Deterministic and reproducible.** There is no training period, no model to drift, no threshold to tune. A `stable_hash` computed at 9:05 AM on Host A matches the same behavior at 3:22 PM on Host B — always, by construction. This is court-admissible: the hash is a mathematical identity, not a probabilistic inference.
+
+**The deduplication ripple effect:**
+
+```
+                      Without idempotency          With idempotency
+                      ──────────────────          ─────────────────
+Storage:              Every event stored N times   Stored once; counter increments
+Analyst triage:       Same behavior reviewed       Enrich once; cached for all
+                      400 times across hosts       future occurrences
+LLM enrichment:       Re-enriched per occurrence   Enriched once; cached permanently
+Detection engineering: Rules written per pattern   One detection rule covers all
+                      variant                      occurrences of the hash
+Cross-host hunting:   Manual correlation across    Hash join across fleet
+                      hostnames, PIDs, timestamps  in a single query
+```
+
+The result is not just storage reduction — it's that every downstream system (enrichment, detection, investigation, hunting, compliance) starts from the same deduplicated, pre-scored signal instead of redoing the deduplication work independently.
+
 ### The Bottom Line
 
 | Metric | Raw Log Pipeline | LongHorizons Pipeline |
