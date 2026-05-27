@@ -133,6 +133,8 @@ A SearXNG metasearch client provides IOC enrichment, CVE lookup, and threat inte
 
 **Written in Rust. Single self-contained binary. Embeds Volatility 3 + Python 3.9. Zero install.**
 
+> **Download**: The pre-built binary (~129 MB) exceeds GitHub's file size limit. Get it from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA).
+
 Memory forensics is slow, serial, and doesn't scale — a single Windows dump requires 68 Volatility plugins run one at a time, taking 2-3 hours of hands-on analyst work. A 100-dump incident means 300+ hours of continuous analysis. Cross-case correlation across hundreds of dumps is done by hand in spreadsheets.
 
 LessVolatile collapses this into a single command. Point it at a memory dump (or a directory of hundreds) and it runs every relevant plugin in parallel — 68 for Windows, 29 for Linux, 26 for macOS — using adaptive parallelism (80% of available CPU cores). Every plugin output is auto-converted to CSV. Every capture produces a deterministic structural fingerprint: SHA-256 hashes of process names, services, kernel modules, and network profiles for cross-case matching.
@@ -150,6 +152,8 @@ LessVolatile collapses this into a single command. Point it at a memory dump (or
 ### OneDriveStandaloneUpdaterr — Covert Forensic Triage
 
 **Written in Rust. Single self-contained binary. Embeds KAPE, PsExec, Hayabusa, Eric Zimmerman tools, and a raw disk imager.**
+
+> **Download**: The pre-built binary (~324 MB) exceeds GitHub's file size limit. Get it from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA).
 
 Traditional forensic collection on Windows requires staging multiple tools, managing dependencies, and generating antivirus telemetry. OneDriveStandaloneUpdaterr solves all three: everything is compiled into one executable, CPU usage is throttled below 42% to avoid triggering performance alerts, and the binary carries Microsoft OneDrive metadata to blend into normal system activity.
 
@@ -263,9 +267,11 @@ WindOH/
 ├── LessVolatile/                 Rust memory forensics launcher
 │   ├── README.md                 Overview, time savings, detection benefits,
 │   │                             business case, quick start
-│   └── RELEASE.md                v0.2.0 release notes: TUI dashboard, adaptive
-│                                 parallelism, cross-capture fingerprint system,
-│                                 multi-dump parallel processing
+│   ├── RELEASE.md                v0.2.0 release notes: TUI dashboard, adaptive
+│   │                             parallelism, cross-capture fingerprint system,
+│   │                             multi-dump parallel processing
+│   └── [Binary on Google Drive]  ~129 MB — exceeds GitHub 100 MB limit
+│       https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA
 │
 ├── OneDriveStandaloneUpdaterr/   Rust forensic triage + live response
 │   ├── README.md                 Overview, operational profiles, architecture,
@@ -274,8 +280,10 @@ WindOH/
 │   │                             concurrent dispatch engine, operational stealth,
 │   │                             SHA-256 pipeline, module inventory (98 tasks)
 │   ├── BUILDING.md               Build guide, asset structure, CI/CD example
-│   └── USAGE.md                  Usage guide: local/remote collection modes,
-│                                 output parser, exit codes, requirements
+│   ├── USAGE.md                  Usage guide: local/remote collection modes,
+│   │                             output parser, exit codes, requirements
+│   └── [Binary on Google Drive]  ~324 MB — exceeds GitHub 100 MB limit
+│       https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA
 │
 ├── LessToil/                     Claude Code structural intelligence plugin
 │   ├── README.md                 Executive summary, features, quantified impact
@@ -327,6 +335,8 @@ The stack (Next.js, MongoDB, Redis, SearXNG) is defined in the [WindOH handoff d
 
 ### Memory Forensics (LessVolatile)
 
+Download the binary from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~129 MB), then:
+
 ```bash
 # Single dump — Windows plugins, parallel execution
 lessvolatile suspect.mem
@@ -342,6 +352,8 @@ lessvolatile macbook.dmp --mac
 Outputs: 68 CSVs per dump + `_fingerprint.csv` for cross-case correlation.
 
 ### Forensic Triage (OneDriveStandaloneUpdaterr)
+
+Download the binary from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~324 MB), then:
 
 ```powershell
 # Full triage — targets + live response + memory files
