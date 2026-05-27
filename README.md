@@ -239,6 +239,8 @@ TDH property extraction
 
 **TypeScript/Next.js. MongoDB + Redis + local LLM.**
 
+> **WindOH.us** — A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow will be available at [windoh.us](https://windoh.us) in the coming days. It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
+
 Polls Elasticsearch for new telemetry, upserts each `stable_hash` into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) — no external API calls, no data leaving the environment.
 
 - **Markov sequence engine**: MongoDB aggregation pipelines compute transition probability matrices from temporal event chains. Prediction API returns top-N most probable next behaviors with probabilities, mean inter-event timing, and cross-host prevalence.
