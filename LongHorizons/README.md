@@ -247,16 +247,98 @@ Invoke-RestMethod http://127.0.0.1:8080/health
 Invoke-RestMethod http://your-es:9200/_cat/indices/longhorizons-*
 ```
 
-## Default Elasticsearch Indexes
+## Multi-Tier Baselining: Four Indexes, One Picture of Normal
 
-All indexes use fixed names (no date patterns) by default:
+The agent doesn't just ship events — it ships a pre-computed baseline across four indexes, each serving a distinct purpose in answering "what's normal here?"
 
-| Index | Content | Volume |
+### The Four Indexes as a Baselining Stack
+
+```
+                        ┌────────────────────────────────────────┐
+                        │        longhorizons-diagnostics        │  ← Is the pipeline healthy?
+                        │  Agent uptime, ETW restarts, dropped   │
+                        │  events, shard backpressure, disk free  │
+                        └────────────────────────────────────────┘
+                                          │
+                        ┌────────────────────────────────────────┐
+                        │        longhorizons-patterns           │  ← What's trending across the fleet?
+                        │  Aggregated frequency per behavior,    │
+                        │  cross-host prevalence, drop counts,   │
+                        │  rarity band transitions over time      │
+                        └────────────────────────────────────────┘
+                                          │
+                        ┌────────────────────────────────────────┐
+                        │        longhorizons-exemplars          │  ← What does this behavior look like?
+                        │  One representative event per unique   │
+                        │  stable_hash, with full payload detail, │
+                        │  reason for sampling, rarity at capture │
+                        └────────────────────────────────────────┘
+                                          │
+                        ┌────────────────────────────────────────┐
+                        │        longhorizons-events             │  ← What's happening right now?
+                        │  Every event with pre-computed rarity, │
+                        │  decay score, behavioral tags, timing, │
+                        │  lineage — the full enrichment payload  │
+                        └────────────────────────────────────────┘
+```
+
+### What Each Index Tells You
+
+**`longhorizons-events` — The detailed record.** Every event, enriched and scored. This is the source of truth for investigation and hunting. Key baselining fields on every document:
+
+| Field | What it tells you |
+|---|---|
+| `rarity_band` | Rare / Uncommon / Common — pre-computed, no query needed |
+| `decay_score` | Recency-weighted frequency (0.0 to unbounded) with configurable half-life |
+| `behavior_tags` | Array of 11 boolean heuristics: `first_seen_binary`, `from_temp_dir`, `encoded_command`, `network_to_loopback`, etc. |
+| `risk_score` | Composite: `(1 - normalization_weight) + (burst_factor × 0.3) + (rarity_factor × 0.4)` |
+| `tokens.stable_hex` | The behavioral identity — join across hosts, indexes, and time ranges |
+| `tokens.payload_hex` | The variant identity — what changed within the same behavioral pattern |
+
+**`longhorizons-exemplars` — The reference gallery.** When a behavior is seen for the first time, or when a payload is a significant deviation from prior observations, the full event (with command lines, IPs, file paths) is exported as an exemplar. This gives analysts a concrete instance of each behavior without storing every occurrence. Reservoir sampling with richness scoring ensures the most information-dense event is kept as the exemplar, not just the first one seen.
+
+**`longhorizons-patterns` — The trend layer.** Aggregated statistics documents emitted on a configurable interval (default: every 5 minutes or every N events). Track fleet-level behavioral drift:
+
+| Metric | Use |
+|---|---|
+| `frequency_estimate` | How often this behavior occurs across all hosts (CMS estimate) |
+| `dropped_count` | Events dropped due to backpressure — a spike here means the pipeline is saturated |
+| `pattern_type` | Categorizes the pattern document: `frequency_update`, `rarity_transition`, `new_behavior`, `payload_deviation` |
+| Cross-host count | How many distinct agent IDs have reported this behavior |
+| Rarity band transitions | A behavior that moved from Common → Uncommon (dormant threat? cleanup completed?) |
+
+**`longhorizons-diagnostics` — The meta-baseline.** The pipeline observing itself. Diagnostics documents are exported on a health-check interval and whenever a state transition occurs:
+
+| Signal | Meaning |
+|---|---|
+| `etw_restart_count` | ETW session has been lost and recreated — possible tampering or provider conflict |
+| `dropped_events` | Pipeline backpressure exceeded capacity — events were dropped |
+| `shard_backpressure[N]` | Per-shard queue depth — hot shards indicate skewed behavior distribution |
+| `disk_free_gb` | Available disk space on the agent host |
+| `events_per_second` | Throughput — a sudden drop may indicate ETW provider failure or system load |
+| `outbox_depth` / `dead_letter_depth` | Export health — growing outbox means ES is unreachable; dead-letter means data loss risk |
+
+### Why This Matters Operationally
+
+A SOC team running conventional log forwarding has to build all of this themselves — dashboards for pipeline health, queries for behavioral frequency, manual sampling for exemplars, threshold tuning for anomaly detection. LongHorizons ships it pre-computed:
+
+- **Onboarding a new analyst:** Query `rarity_band:rare` across the events index. That's the investigation surface. No manual baseline building required.
+- **Fleet health check:** Query the diagnostics index for `dropped_events > 0` or `etw_restart_count > 0` in the last 24 hours. Every host with a degraded pipeline surfaces immediately.
+- **Behavioral drift detection:** Query the patterns index for `pattern_type:rarity_transition`. Behaviors that changed rarity bands in the last interval — a dormant threat waking up, or a cleanup operation completing — are surfaced without manual trend analysis.
+- **Threat hunting at scale:** "Show me every host that has exhibited behavior X" is a single term query on `tokens.stable_hex` across the events index, even if X was first observed on a different host six months ago.
+
+### ILM Retention Policy
+
+Index Lifecycle Management keeps the storage footprint predictable:
+
+| Phase | Duration | Action |
 |---|---|---|
-| `longhorizons-events` | Individual telemetry events with full enrichment | High |
-| `longhorizons-exemplars` | Representative event samples per stable token | Low |
-| `longhorizons-patterns` | Aggregated pattern/statistics documents | Medium |
-| `longhorizons-diagnostics` | Agent health and self-monitoring | Very low |
+| Hot | 0–7 days | Active indexing, full replicas, 5s refresh |
+| Warm | 7–30 days | Read-only, reduced replicas, force-merged to 1 segment |
+| Cold | 30–90 days | Read-only, no replicas, mounted on searchable snapshots |
+| Delete | 90+ days | Index deleted |
+
+Patterns and diagnostics indexes retain for longer (365 days) to provide year-over-year behavioral trend comparison. Events and exemplars follow the 90-day cycle. See [ES-INDEX-TEMPLATES.md](ES-INDEX-TEMPLATES.md) for the full configuration.
 
 ## Architecture & Technology Stack
 
