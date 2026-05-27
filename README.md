@@ -306,7 +306,7 @@ graph LR
 
     subgraph ExtZone ["External Zone"]
         ES[("Elasticsearch<br/>(transport only)")]
-        LLM[Local LLM<br/>(same network)"]
+        LLM["Local LLM<br/>(same network)"]
         SearXNG["SearXNG"]
     end
 
