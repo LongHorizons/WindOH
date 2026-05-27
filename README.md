@@ -1,7 +1,7 @@
 # WindOH — Windows Detection, Response, and Forensics Platform
 
 <p align="center">
-  <img src="windOH.png" alt="WindOH">
+  <img src="windOH.png" alt="WindOH" width="33%">
 </p>
 
 **Behavioral telemetry collection and analysis, memory forensics at scale, and covert forensic triage for Windows environments.**
