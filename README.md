@@ -279,7 +279,6 @@ WindOH/
 │   ├── FEATURES.md               Feature breakdown: embedded dependency model,
 │   │                             concurrent dispatch engine, operational stealth,
 │   │                             SHA-256 pipeline, module inventory (98 tasks)
-│   ├── BUILDING.md               Build guide, asset structure, CI/CD example
 │   ├── USAGE.md                  Usage guide: local/remote collection modes,
 │   │                             output parser, exit codes, requirements
 │   └── [Binary on Google Drive]  ~324 MB — exceeds GitHub 100 MB limit
@@ -324,14 +323,6 @@ cd LongHorizons
 ```
 
 Edit `config.toml` to set `agent.id`, Elasticsearch endpoint, and API key. The agent installs as a Windows service with automatic startup and failure recovery. Apply the index templates from [ES-INDEX-TEMPLATES.md](LongHorizons/ES-INDEX-TEMPLATES.md).
-
-### Behavioral Intelligence (WindOH)
-
-```bash
-docker compose up -d
-```
-
-The stack (Next.js, MongoDB, Redis, SearXNG) is defined in the [WindOH handoff document](LongHorizons/WindOH.md), section 10.
 
 ### Memory Forensics (LessVolatile)
 

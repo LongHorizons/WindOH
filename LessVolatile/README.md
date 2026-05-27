@@ -294,44 +294,9 @@ awk -F',' '$16 != 0' */_fingerprint.csv
 Combine fingerprints from hundreds of dumps into a single CSV for clustering, outlier detection, or timeline analysis.
 
 ---
-
-## Building from Source
-
-```bash
-git clone https://github.com/yourusername/lessvolatile.git
-cd lessvolatile
-
-# Prepare assets (not included in repo due to size)
-# Place Volatility 3 bundle as src/assets/lit.zip
-# Place embeddable Python as src/assets/python.zip
-
-cargo build --release
-# Binary: target/release/lessvolatile (.exe on Windows)
-```
-
-### Dependencies
-
-All Rust dependencies are declared in `Cargo.toml`:
-
-| Crate | Purpose |
-|---|---|
-| `zip` | Extract embedded Volatility and Python bundles |
-| `sha2` | SHA-256 hashing for fingerprint and integrity |
-| `csv` | CSV serialization |
-| `ratatui` + `crossterm` | Terminal UI dashboard |
-| `indicatif` | Progress bars (non-TUI mode) |
-| `chrono` | Timestamps |
-| `hex` | Hex encoding for error logs |
-
 ---
 
 ## FAQ
-
-**Q: Can I add custom plugins?**
-Edit the plugin arrays in `src/main.rs` (`WINDOWS_PLUGINS`, `LINUX_PLUGINS`, `MAC_PLUGINS`) and rebuild.
-
-**Q: Does it work on ARM?**
-Yes — if you can build Volatility 3 and embeddable Python for ARM, the Rust binary compiles cross-platform.
 
 **Q: How big is the binary?**
 ~130 MB (contains Volatility 3 + Python 3.9 stdlib compressed with zstd). The extracted cache is ~400 MB on first run.

@@ -127,16 +127,12 @@ For a 1,000-endpoint fleet, this means **90-99% reduction in stored event volume
 | **Privileges** | Administrator or LocalSystem (required for ETW trace sessions) |
 | **Binary** | Single ~8 MB self-contained `.exe` — no runtime dependencies |
 | **Elasticsearch** | 7.x or 8.x with bulk API (optional — agent runs without it) |
-| **Rust** | 1.75+ (only needed if building from source) |
 
 ## Quick Start
 
-### 1. Build (or copy pre-built binary)
+### 1. Get the binary
 
-```powershell
-cargo build --release
-# Binary at: target\release\agent.exe (~8 MB)
-```
+Extract the pre-built agent from `release.zip` (~3.6 MB) or download from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA).
 
 ### 2. Create directories
 
@@ -147,7 +143,7 @@ mkdir C:\ProgramData\LongHorizonsAgent\logs
 
 ### 3. Configure
 
-Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml` and fill in:
+Copy `config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml` and fill in:
 - `agent.id` — unique host identifier
 - `export.events.endpoint` — your Elasticsearch URL
 - `export.events.api_key` — your ES API key (or leave empty for no auth)
@@ -155,7 +151,7 @@ Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml
 ### 4. Test run (foreground)
 
 ```powershell
-.\target\release\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
+.\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
 ```
 
 Watch for:
