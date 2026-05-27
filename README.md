@@ -51,13 +51,13 @@ graph TB
     classDef store fill:#336791,stroke:#1a3d55,color:#fff
 
     subgraph Endpoint ["Windows Endpoint"]
-        LH[LongHorizons Agent<br/>Rust | ~8 MB | 47 ETW providers]
-        OSD[OneDriveStandaloneUpdaterr<br/>Rust | ~324 MB | KAPE+PsExec+EZ Tools]
-        LV[LessVolatile<br/>Rust | ~129 MB | Volatility 3+Python 3.9]
+        LH["LongHorizons Agent<br/>Rust · ~8 MB · 47 ETW providers"]
+        OSD["OneDriveStandaloneUpdaterr<br/>Rust · ~324 MB · KAPE+PsExec+EZ Tools"]
+        LV["LessVolatile<br/>Rust · ~129 MB · Volatility 3+Python 3.9"]
     end
 
     subgraph Transport ["Transport Layer"]
-        ES[("Elasticsearch 8.x<br/>events | exemplars | patterns")]
+        ES[("Elasticsearch 8.x<br/>events · exemplars · patterns")]
     end
 
     subgraph Application ["Intelligence Application"]
@@ -69,8 +69,8 @@ graph TB
     end
 
     subgraph Storage ["Persistence Layer"]
-        Mongo[("MongoDB 7<br/>tokens | sequences | intel")]
-        Redis[("Redis<br/>BullMQ queues | cache")]
+        Mongo[("MongoDB 7<br/>tokens · sequences · intel")]
+        Redis[("Redis<br/>BullMQ queues · cache")]
     end
 
     subgraph AI ["Inference"]
@@ -78,7 +78,7 @@ graph TB
     end
 
     subgraph Dev ["Developer Tooling"]
-        LT[LessToil Plugin<br/>Python | 40 modules | 56 languages]
+        LT["LessToil Plugin<br/>Python · 40 modules · 56 languages"]
     end
 
     LH -->|"gzip JSON<br/>bulk API"| ES
