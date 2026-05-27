@@ -1,0 +1,98 @@
+{
+  "name": "less-toil",
+  "version": "0.4.0",
+  "description": "LessToil — 40-module structural intelligence platform for Claude Code. Indexes codebases into a persistent SQLite knowledge graph (26 tables) across 56 languages (41 tree-sitter + 15 regex fallback). Builds weighted call graphs with static and dynamic edge tracking. Infers 14 architectural domains with security boundary marking. Enforces architectural governance via SQL invariants and threshold policies with a 6-verifier consensus engine. Runs a 10-phase verification pipeline before every edit (PLAN → SIMULATE → VERIFY → CONSTRAIN → EXECUTE → TEST → TRACE → SCORE → REPAIR → REVERIFY). Detects duplicated code via SimHash 64-bit fingerprinting. Analyzes git history for temporal risk scoring (churn, bug density, ownership volatility). Tracks architectural drift across 4 axes with persistent scores. Runs 6-category autonomous stewardship scans. Implements a self-healing loop (Detect → Propose → Validate → Repair) with a repository immune system. Provides 18 advanced intelligence modules: epistemic evidence tracking, long-horizon forecasting (1x-10x scale), semantic compression, economic cost modeling, cognitive load analysis, design intent preservation, adversarial robustness, knowledge decay detection, operational sovereignty, reality alignment, meta-reasoning, toolchain auditing, refactor scoring, and more. Incrementally reindexes changed files after every edit (< 1 second per file) with a confidence feedback loop. Exports unified weighted multi-edge graphs (JSON + DOT) merging AST, type, runtime, profiling, and temporal data. Installs in under 60 seconds with zero configuration required.",
+  "author": {
+    "name": "LessToil Team"
+  },
+  "homepage": "https://github.com/LongHorizons/WindOH/LessToil/tree/main/plugins/repo-cognition",
+  "repository": "https://github.com/LongHorizons/WindOH/LessToil",
+  "keywords": [
+    "indexing",
+    "analysis",
+    "architecture",
+    "call-graph",
+    "duplicate-detection",
+    "verification",
+    "governance",
+    "temporal-risk",
+    "drift-detection",
+    "stewardship",
+    "self-healing",
+    "consensus",
+    "immune-system",
+    "epistemic",
+    "simhash",
+    "tree-sitter",
+    "sqlite",
+    "codebase-intelligence",
+    "structural-analysis",
+    "impact-analysis",
+    "dead-code-detection",
+    "security-boundaries",
+    "taint-analysis",
+    "architectural-drift",
+    "forecasting",
+    "knowledge-graph"
+  ],
+  "hooks": [
+    "SessionStart",
+    "PreToolUse",
+    "PostToolUse"
+  ],
+  "commands": [
+    "/index-status",
+    "/index-rebuild",
+    "/index-graph"
+  ],
+  "skills": [
+    "repo-cognition-query"
+  ],
+  "agents": [
+    "architecture-inferrer"
+  ],
+  "supportedLanguages": [
+    "python",
+    "typescript",
+    "javascript",
+    "go",
+    "rust",
+    "java",
+    "c",
+    "cpp",
+    "csharp",
+    "ruby",
+    "php",
+    "swift",
+    "kotlin",
+    "scala",
+    "lua",
+    "dart",
+    "zig",
+    "solidity",
+    "elixir",
+    "haskell",
+    "ocaml",
+    "svelte",
+    "sql",
+    "bash",
+    "html",
+    "css",
+    "json",
+    "yaml",
+    "toml",
+    "markdown",
+    "dockerfile",
+    "hcl",
+    "graphql",
+    "make",
+    "cmake",
+    "powershell",
+    "nix"
+  ],
+  "requirements": {
+    "python": ">=3.8",
+    "git": "*",
+    "claude-code": "*"
+  }
+}
