@@ -262,6 +262,28 @@ if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     fi
 fi
 
+# After GitHub clone, SCRIPT_DIR points to LessToil/plugin which contains
+# repo-cognition.zip — extract it if we don't have core/manifest.py yet.
+if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ] && [ -f "${SCRIPT_DIR}/repo-cognition.zip" ]; then
+    ZIP_TEMP="$(mktemp -d)"
+    echo "      Extracting plugin from repo-cognition.zip..."
+    if command -v unzip &>/dev/null; then
+        unzip -q "${SCRIPT_DIR}/repo-cognition.zip" -d "$ZIP_TEMP"
+    elif "$INSTALL_PYTHON" -c "import zipfile" 2>/dev/null; then
+        "$INSTALL_PYTHON" -c "
+import zipfile
+zf = zipfile.ZipFile('${SCRIPT_DIR}/repo-cognition.zip')
+zf.extractall('$ZIP_TEMP')
+print(f'Extracted {len(zf.namelist())} files')
+"
+    else
+        echo "ERROR: Neither 'unzip' nor Python zipfile available."
+        rm -rf "$ZIP_TEMP"
+        exit 1
+    fi
+    SCRIPT_DIR="$ZIP_TEMP"
+fi
+
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     echo "ERROR: Plugin source not found. Ensure core/manifest.py exists in the source."
     exit 1
