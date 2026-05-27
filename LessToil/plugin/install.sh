@@ -23,12 +23,12 @@ PLUGIN_DIR="${HOME}/.claude/plugins/${PLUGIN_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ANSI formatting
-BOLD='\033[1m'
-DIM='\033[2m'
-RESET='\033[0m'
-GREEN='\033[32m'
-YELLOW='\033[33m'
-RED='\033[31m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+RESET=$'\033[0m'
+GREEN=$'\033[32m'
+YELLOW=$'\033[33m'
+RED=$'\033[31m'
 
 # --- Parse arguments ---------------------------------------------------------
 PROJECT_DIR="${PWD}"
@@ -138,7 +138,7 @@ if [ "$NO_VENV" = false ]; then
         }
     fi
     if [ "$NO_VENV" = false ]; then
-        # Upgrade pip inside the venv
+        # Bootstrap pip if missing (Ubuntu's python3-venv may omit it) then upgrade
         if [ -f "${VENV_DIR}/bin/python" ]; then
             VENV_PYTHON="${VENV_DIR}/bin/python"
             VENV_PIP="${VENV_DIR}/bin/pip"
@@ -151,6 +151,9 @@ if [ "$NO_VENV" = false ]; then
         fi
     fi
     if [ "$NO_VENV" = false ]; then
+        if ! "$VENV_PYTHON" -m pip --version 2>/dev/null; then
+            "$VENV_PYTHON" -m ensurepip --upgrade 2>/dev/null || true
+        fi
         "$VENV_PYTHON" -m pip install --quiet --upgrade pip 2>/dev/null || true
         echo "      Venv ready: $VENV_PYTHON"
     fi
