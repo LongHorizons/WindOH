@@ -71,48 +71,122 @@ if [ "$PLUGIN_ONLY" = false ] && [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-# --- Detect Python ----------------------------------------------------------
+# --- Dependency check ---------------------------------------------------------
+# Detect package manager for install commands
+PKG_MANAGER=""
+PKG_INSTALL=""
+PKG_UPDATE=""
+for mgr in apt-get dnf brew pacman apk; do
+    if command -v "$mgr" &>/dev/null; then
+        PKG_MANAGER="$mgr"
+        break
+    fi
+done
+case "$PKG_MANAGER" in
+    apt-get) PKG_INSTALL="sudo apt-get install -y -qq"; PKG_UPDATE="sudo apt-get update -qq" ;;
+    dnf)     PKG_INSTALL="sudo dnf install -y";     PKG_UPDATE="" ;;
+    brew)    PKG_INSTALL="brew install";             PKG_UPDATE="" ;;
+    pacman)  PKG_INSTALL="sudo pacman -S --noconfirm"; PKG_UPDATE="" ;;
+    apk)     PKG_INSTALL="sudo apk add";             PKG_UPDATE="" ;;
+esac
+
+# Collect missing dependencies
+MISSING_DEPS=()
+MISSING_LABELS=()
+
+check_cmd() {
+    command -v "$1" &>/dev/null && return 0 || return 1
+}
+
+# Python 3.8+
 PYTHON=""
 for candidate in python3 python; do
-    if command -v "$candidate" &>/dev/null; then
+    if check_cmd "$candidate"; then
         case "$("$candidate" --version 2>&1)" in
-            "Python 3."*) PYTHON="$candidate"; break ;;
+            "Python 3."*)
+                PY_MAJOR=$("$candidate" -c "import sys; print(sys.version_info[0])" 2>/dev/null || echo 0)
+                PY_MINOR=$("$candidate" -c "import sys; print(sys.version_info[1])" 2>/dev/null || echo 0)
+                if [ "$PY_MAJOR" -ge 3 ] && [ "$PY_MINOR" -ge 8 ]; then
+                    PYTHON="$candidate"
+                    break
+                fi
+                ;;
         esac
     fi
 done
-
-# Auto-install Python if missing and --accept was given
-if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
-    echo "Python 3.8+ not found. --accept: attempting auto-install..."
-    if command -v apt-get &>/dev/null; then
-        echo "      Detected apt-get — installing python3..."
-        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
-    elif command -v brew &>/dev/null; then
-        echo "      Detected Homebrew — installing python3..."
-        brew install python3 2>&1 || true
-    elif command -v dnf &>/dev/null; then
-        echo "      Detected dnf — installing python3..."
-        sudo dnf install -y python3 python3-pip 2>&1 || true
-    elif command -v pacman &>/dev/null; then
-        echo "      Detected pacman — installing python3..."
-        sudo pacman -S --noconfirm python python-pip 2>&1 || true
-    elif command -v apk &>/dev/null; then
-        echo "      Detected apk — installing python3..."
-        sudo apk add python3 py3-pip 2>&1 || true
-    fi
-    # Re-detect
-    for candidate in python3 python; do
-        if command -v "$candidate" &>/dev/null; then
-            case "$("$candidate" --version 2>&1)" in
-                "Python 3."*) PYTHON="$candidate"; break ;;
-            esac
-        fi
-    done
+if [ -z "$PYTHON" ]; then
+    MISSING_DEPS+=("python3 python3-pip python3-venv")
+    MISSING_LABELS+=("Python 3.8+ (python3, pip, venv)")
 fi
 
+# git
+if ! check_cmd git; then
+    MISSING_DEPS+=("git")
+    MISSING_LABELS+=("Git")
+fi
+
+# Handle missing dependencies
+if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+    echo ""
+    echo "The following dependencies are missing:"
+    for label in "${MISSING_LABELS[@]}"; do
+        echo "  - $label"
+    done
+    echo ""
+
+    if [ -z "$PKG_MANAGER" ]; then
+        echo "No supported package manager detected (apt, dnf, brew, pacman, apk)."
+        echo "Please install the missing dependencies manually and re-run."
+        exit 1
+    fi
+
+    if [ "$ACCEPT" = true ]; then
+        echo "--accept: auto-installing missing dependencies with $PKG_MANAGER..."
+        [ -n "$PKG_UPDATE" ] && $PKG_UPDATE 2>&1 || true
+        for pkg_list in "${MISSING_DEPS[@]}"; do
+            echo "      Installing: $pkg_list"
+            $PKG_INSTALL $pkg_list 2>&1 || true
+        done
+    else
+        echo "Install them now using your package manager? [Y/n]"
+        echo ""
+        echo "  $PKG_INSTALL ${MISSING_DEPS[*]}"
+        echo ""
+        read -r REPLY
+        case "${REPLY:-y}" in
+            [Yy]|[Yy][Ee][Ss])
+                [ -n "$PKG_UPDATE" ] && $PKG_UPDATE 2>&1 || true
+                for pkg_list in "${MISSING_DEPS[@]}"; do
+                    $PKG_INSTALL $pkg_list 2>&1 || {
+                        echo "WARNING: Failed to install $pkg_list — continuing anyway."
+                    }
+                done
+                ;;
+            *)
+                echo "Dependencies required. Re-run with --accept for non-interactive install,"
+                echo "or install manually and try again."
+                exit 1
+                ;;
+        esac
+    fi
+
+    # Re-detect Python after install
+    if [ -z "$PYTHON" ]; then
+        for candidate in python3 python; do
+            if check_cmd "$candidate"; then
+                case "$("$candidate" --version 2>&1)" in
+                    "Python 3."*) PYTHON="$candidate"; break ;;
+                esac
+            fi
+        done
+    fi
+    echo ""
+fi
+
+# Final Python check
 if [ -z "$PYTHON" ]; then
-    echo "ERROR: Python 3.8+ required but not found. Install from https://python.org"
-    echo "       Or re-run with --accept to attempt automatic installation."
+    echo "ERROR: Python 3.8+ required but was not installed successfully."
+    echo "       Install from https://python.org and re-run."
     exit 1
 fi
 
@@ -235,10 +309,7 @@ fi
 GIT_TEMP_DIR=""
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     if ! command -v git &>/dev/null; then
-        echo "ERROR: git not found on PATH. The installer requires git to fetch the plugin."
-        echo ""
-        echo "Install git from https://git-scm.com/downloads or run this script"
-        echo "from a local clone of the repository, or use --from-zip."
+        echo "ERROR: git is required but not available. Re-run with --accept for auto-install."
         exit 1
     fi
 
