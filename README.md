@@ -1,5 +1,3 @@
-# WindOH — Windows Detection, Response, and Forensics Platform
-
 <p align="center">
   <img src="windOH.png" alt="WindOH">
 </p>
