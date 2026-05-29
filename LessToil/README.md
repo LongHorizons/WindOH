@@ -300,13 +300,13 @@ Approximately 10-20% of source code size. A 10 MB codebase produces a 1-2 MB SQL
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 ```
 
 ### macOS / Linux (Bash)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 ```
 
 ### Post-Install

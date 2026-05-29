@@ -456,7 +456,7 @@ Download from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9
 ### Developer Tooling (LessToil)
 
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/main/LessToil/plugin/install.ps1 | iex
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 ```
 
 ---

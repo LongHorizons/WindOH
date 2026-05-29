@@ -46,7 +46,7 @@ No. LessToil is specifically designed to augment Claude Code's reasoning within 
 
 ### What license is this under?
 
-MIT. The plugin is open source and lives at `plugins/repo-cognition/` within the [LongHorizons/WindOH/LessToil](https://github.com/LongHorizons/WindOH/LessToil) monorepo.
+MIT. The plugin is open source and lives at `LessToil/plugin/` within the [LongHorizons/WindOH](https://github.com/LongHorizons/WindOH) monorepo.
 
 ---
 
@@ -412,11 +412,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). The process involves: (1) adding extensi
 
 ### How do I report a bug?
 
-Open an issue at https://github.com/LongHorizons/WindOH/LessToil with: your project's primary language and approximate file count, Python version (`python --version`), the error message or unexpected behavior, steps to reproduce, and whether it occurs on fresh sessions or after specific operations.
+Open an issue at https://github.com/LongHorizons/WindOH with: your project's primary language and approximate file count, Python version (`python --version`), the error message or unexpected behavior, steps to reproduce, and whether it occurs on fresh sessions or after specific operations.
 
 ### What's the relationship between the plugin and the claude-code monorepo?
 
-The plugin lives at `plugins/repo-cognition/` within the [LongHorizons/WindOH/LessToil](https://github.com/LongHorizons/WindOH/LessToil) monorepo. It is developed alongside Claude Code but is a standalone plugin — it does not depend on the monorepo to function. The installers fetch just the plugin directory via sparse checkout, so users never need to clone the entire monorepo.
+The plugin lives at `LessToil/plugin/` within the [LongHorizons/WindOH](https://github.com/LongHorizons/WindOH) monorepo. It is developed alongside Claude Code but is a standalone plugin — it does not depend on the monorepo to function. The installers fetch just the plugin directory via sparse checkout, so users never need to clone the entire monorepo.
 
 ### Can I contribute to the plugin without contributing to Claude Code?
 

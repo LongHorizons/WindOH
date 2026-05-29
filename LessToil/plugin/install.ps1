@@ -29,7 +29,7 @@
     Git branch to fetch from GitHub. Defaults to "main".
 
 .PARAMETER RepoUrl
-    GitHub repository URL. Defaults to "https://github.com/LongHorizons/WindOH/LessToil".
+    GitHub repository URL. Defaults to "https://github.com/LongHorizons/WindOH".
 
 .PARAMETER Help
     Show this help message.
@@ -47,7 +47,7 @@
     Installs from a local release zip without any prompts.
 
 .EXAMPLE
-    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1").Content
+    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1").Content
     One-liner from GitHub (run from your project directory).
 #>
 
@@ -59,8 +59,8 @@ param(
     [string]$FromZip = "",
     [switch]$Accept,
     [switch]$NoVenv,
-    [string]$Branch = "main",
-    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH/LessToil",
+    [string]$Branch = "master",
+    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH",
     [switch]$Help
 )
 
@@ -92,14 +92,14 @@ Options:
   -FromZip FILE       Install from a local release zip instead of GitHub
   -Accept             Non-interactive mode: auto-confirm all prompts
   -NoVenv             Skip creating ~/.claude/venv/, use system Python directly
-  -Branch NAME        Git branch to fetch from GitHub (default: main)
+  -Branch NAME        Git branch to fetch from GitHub (default: master)
   -RepoUrl URL        GitHub repository URL
   -Help               Show this help
 
 Source priority: -FromZip > local clone > GitHub
 
 One-liner from GitHub:
-  irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
+  irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 "@ | Write-Host
     exit 0
 }
@@ -285,7 +285,7 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
 
     if ($GIT) {
         Write-Detail "Cloning plugin from $RepoUrl (branch: $Branch)..."
-        Write-Detail "Using sparse checkout for plugins/repo-cognition/"
+        Write-Detail "Using sparse checkout for LessToil/plugin/"
 
         # Clean up any previous temp clone
         if (Test-Path $TEMP_CLONE) { Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue }
@@ -303,7 +303,7 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
             }
         } else {
             Push-Location $TEMP_CLONE
-            git sparse-checkout set "plugins/repo-cognition" 2>&1 | Out-Null
+            git sparse-checkout set "LessToil/plugin" 2>&1 | Out-Null
             Pop-Location
         }
 

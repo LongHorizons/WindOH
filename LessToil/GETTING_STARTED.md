@@ -66,14 +66,14 @@ If Python is not found on Windows, run `where.exe python`. If missing, install f
 Run from your project directory:
 
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 ```
 
 #### From Local Clone
 
 ```powershell
-git clone https://github.com/LongHorizons/WindOH/LessToil.git $env:TEMP\claude-code
-Set-Location $env:TEMP\claude-code\plugins\repo-cognition
+git clone https://github.com/LongHorizons/WindOH.git $env:TEMP\claude-code
+Set-Location $env:TEMP\claude-code\LessToil\plugin
 .\install.ps1
 ```
 
@@ -100,14 +100,14 @@ Set-Location $env:TEMP\claude-code\plugins\repo-cognition
 Run from your project directory:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 ```
 
 #### From Local Clone
 
 ```bash
-git clone https://github.com/LongHorizons/WindOH/LessToil.git /tmp/claude-code
-cd /tmp/claude-code/plugins/repo-cognition
+git clone https://github.com/LongHorizons/WindOH.git /tmp/claude-code
+cd /tmp/claude-code/LessToil/plugin
 bash install.sh
 ```
 

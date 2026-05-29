@@ -270,7 +270,7 @@ New intelligence modules follow the existing pattern:
 
 ```bash
 # Clone the monorepo
-git clone https://github.com/LongHorizons/WindOH/LessToil.git
+git clone https://github.com/LongHorizons/WindOH.git
 cd claude-code
 
 # Install Python dependencies
@@ -280,7 +280,7 @@ pip install tree-sitter tree-sitter-python tree-sitter-typescript \
 # Verify the plugin core loads
 python3 -c "
 import sys
-sys.path.insert(0, 'plugins/repo-cognition')
+sys.path.insert(0, 'LessToil/plugin')
 from core.manifest import init_db
 init_db()
 print('Plugin core loaded successfully')
@@ -293,7 +293,7 @@ For active development, install the plugin and grammar packages in development m
 
 ```bash
 # Install grammar packages from the installer
-cd plugins/repo-cognition
+cd LessToil/plugin
 python3 -c "
 import subprocess, sys
 packages = [
@@ -324,19 +324,19 @@ for pkg in packages:
 ```bash
 # Test SessionStart (run from a project directory)
 echo '{"session_id":"test","cwd":"'$(pwd)'"}' | \
-  CLAUDE_PLUGIN_ROOT="$(pwd)/plugins/repo-cognition" \
+  CLAUDE_PLUGIN_ROOT="$(pwd)/LessToil/plugin" \
   CLAUDE_PROJECT_DIR="$(pwd)" \
-  python3 plugins/repo-cognition/hooks/session_start.py
+  python3 LessToil/plugin/hooks/session_start.py
 
 # Test PostToolUse (simulates editing a file)
 echo '{"tool_name":"Write","tool_input":{"file_path":"src/test.ts","content":"function hello() {}"}}' | \
-  CLAUDE_PLUGIN_ROOT="$(pwd)/plugins/repo-cognition" \
-  python3 plugins/repo-cognition/hooks/post_tool_use.py
+  CLAUDE_PLUGIN_ROOT="$(pwd)/LessToil/plugin" \
+  python3 LessToil/plugin/hooks/post_tool_use.py
 
 # Test PreToolUse (simulates a change before execution)
 echo '{"tool_name":"Write","tool_input":{"file_path":"src/test.ts","content":"function login() {}"}}' | \
-  CLAUDE_PLUGIN_ROOT="$(pwd)/plugins/repo-cognition" \
-  python3 plugins/repo-cognition/hooks/pre_tool_use.py
+  CLAUDE_PLUGIN_ROOT="$(pwd)/LessToil/plugin" \
+  python3 LessToil/plugin/hooks/pre_tool_use.py
 ```
 
 ### Test Core Modules Individually
@@ -345,7 +345,7 @@ echo '{"tool_name":"Write","tool_input":{"file_path":"src/test.ts","content":"fu
 # File indexing
 python3 -c "
 import sys
-sys.path.insert(0, 'plugins/repo-cognition')
+sys.path.insert(0, 'LessToil/plugin')
 from core.manifest import init_db, get_stats
 from core.indexer import walk_repository
 init_db()
@@ -358,7 +358,7 @@ print(stats)
 # Symbol extraction on a specific file
 python3 -c "
 import sys
-sys.path.insert(0, 'plugins/repo-cognition')
+sys.path.insert(0, 'LessToil/plugin')
 from core.symbols import parse_file
 symbols, calls = parse_file('src/example.py', 'python')
 print(f'Extracted {len(symbols)} symbols, {len(calls)} calls')
@@ -369,7 +369,7 @@ for s in symbols[:5]:
 # Call graph queries
 python3 -c "
 import sys
-sys.path.insert(0, 'plugins/repo-cognition')
+sys.path.insert(0, 'LessToil/plugin')
 from core.call_graph import get_callers, search_symbols, get_hotspots
 results = search_symbols('main')
 for r in results:
@@ -379,7 +379,7 @@ for r in results:
 # Domain inference
 python3 -c "
 import sys
-sys.path.insert(0, 'plugins/repo-cognition')
+sys.path.insert(0, 'LessToil/plugin')
 from core.domains import classify_all_files, get_all_domains
 counts = classify_all_files()
 for domain, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
@@ -389,7 +389,7 @@ for domain, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
 # SimHash normalization
 python3 -c "
 import sys
-sys.path.insert(0, 'plugins/repo-cognition')
+sys.path.insert(0, 'LessToil/plugin')
 from core.similarity import normalize_code
 code = '''def calculate_total(items):
     \"\"\"Sum the prices.\"\"\"
@@ -404,7 +404,7 @@ print(f'Normalized: {normalized}')
 
 ```bash
 # Test the Bash installer (uses local clone)
-cd plugins/repo-cognition
+cd LessToil/plugin
 bash install.sh --project-dir /tmp/test-project --reindex
 
 # Test the PowerShell installer
@@ -465,7 +465,7 @@ pwsh -File install.ps1 -ProjectDir /tmp/test-project -Reindex
 
 ## Pull Request Process
 
-1. **Fork** the repository at https://github.com/LongHorizons/WindOH/LessToil
+1. **Fork** the repository at https://github.com/LongHorizons/WindOH
 2. **Create** a feature branch: `git checkout -b feature/my-feature`
 3. **Implement** your changes following the [Code Style](#code-style) guidelines
 4. **Test** your changes using the commands in [Testing Your Changes](#testing-your-changes)
@@ -546,7 +546,7 @@ pwsh -File install.ps1 -ProjectDir /tmp/test-project -Reindex
 
 ### ADR-006: Sparse Checkout for Installation
 **Date**: 2026-05-23
-**Decision**: Both installers use `git sparse-checkout` with `--filter=blob:none` to fetch only `plugins/repo-cognition/`.
+**Decision**: Both installers use `git sparse-checkout` with `--filter=blob:none` to fetch only `LessToil/plugin/`.
 **Rationale**: The monorepo is large. Sparse checkout makes installation fast (< 10 seconds) even on slow connections.
 **Alternatives**: Download individual files (fragile, 48+ files), submodule (adds complexity), separate repo (co-developed with monorepo).
 
@@ -572,4 +572,4 @@ pwsh -File install.ps1 -ProjectDir /tmp/test-project -Reindex
 
 ## Questions?
 
-Open an issue at https://github.com/LongHorizons/WindOH/LessToil or start a discussion. Contributors of all experience levels are welcome.
+Open an issue at https://github.com/LongHorizons/WindOH or start a discussion. Contributors of all experience levels are welcome.
