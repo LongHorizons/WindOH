@@ -16,7 +16,7 @@ Three components answer this question at different altitudes:
 
 | Component | Role | Scale |
 |---|---|---|
-| **LongHorizons Agent** | Rust binary (~8 MB). Captures real-time ETW from 200+ kernel and user-mode providers. Decomposes every event into a stable token (the WHAT — a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO — the instance-specific details). Baselined, rarity-scored, exported. Runs as a Windows service. No runtime dependencies. | One per endpoint |
+| **LongHorizons Agent** | Rust binary (~8 MB). Captures real-time ETW from 200+ kernel and user-mode providers. Decomposes every event into a stable token (the WHAT -- a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO -- the instance-specific details). Baselined, rarity-scored, exported. Runs as a Windows service. No runtime dependencies. | One per endpoint |
 | **WindOH Application** | TypeScript/Next.js web app. Polls Elasticsearch for new tokens, enriches each unique payload token via a local LLM, caches enrichment permanently in MongoDB, builds Markov transition matrices from temporal event sequences, maps Atomic Red Team executions against captured telemetry. | One per fleet |
 | **LessVolatile + OneDriveStandaloneUpdaterr** | Memory forensics at scale. 68 Volatility plugins run in parallel with fingerprint-based deduplication across cases. Covert forensic triage via KAPE, PsExec, and EZ Tools. | On-demand |
 
@@ -24,11 +24,26 @@ Three components answer this question at different altitudes:
 
 Security operations is fundamentally constrained by a category error: **treating behavioral identity as a function of timestamp, PID, and process name, when it should be a function of the behavioral skeleton itself.**
 
-Every time `svchost.exe` makes a DNS query, a new event floods the SIEM — indistinguishable from the last thousand identical queries except for the timestamp. Storage costs grow linearly with fleet size. Signal-to-noise degrades at the same rate. "Have we seen this behavior before?" takes hours of manual hunting. "Is this normal?" takes weeks of baseline building that most teams never complete.
+Every time `svchost.exe` makes a DNS query, a new event floods the SIEM -- indistinguishable from the last thousand identical queries except for the timestamp. Storage costs grow linearly with fleet size. Signal-to-noise degrades at the same rate. "Have we seen this behavior before?" takes hours of manual hunting. "Is this normal?" takes weeks of baseline building that most teams never complete.
 
 WindOH fixes this at the source. Same behavior = same stable token = stored once, queried in microseconds, enriched exactly once. 90--99% reduction in stored event volume before the data reaches the SIEM.
 
-The tokenization model itself is operating-system-agnostic. A behavioral skeleton — process lineage, operation type, normalized parameters with ephemera stripped — abstracts the same way whether the event originates from ETW on Windows, auditd on Linux, osquery on macOS, or CloudTrail in AWS. The same stable token / payload token separation applies: extract the invariant WHAT, isolate the instance-specific WHEN/WHERE/WHO, enrich once, cache permanently. The entire pipeline — agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis — runs on infrastructure you control: on-prem, air-gapped, or inside your VPC on AWS, Azure, or OCI. After validation against Windows telemetry, Atomic Red Team coverage mapping, and the WindOH.us measurement pipeline, the platform extends to Linux hosts, macOS endpoints, Kubernetes audit logs, and cloud control-plane events — same architecture, same enrichment flow, same operator experience.
+The tokenization model itself is operating-system-agnostic. A behavioral skeleton -- process lineage, operation type, normalized parameters with ephemera stripped -- abstracts the same way whether the event originates from ETW on Windows, auditd on Linux, osquery on macOS, CloudTrail in AWS, or Activity Logs in Azure. The same stable token / payload token separation applies to all of them: extract the invariant WHAT, isolate the instance-specific WHEN/WHERE/WHO, enrich once, cache permanently. The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- runs on infrastructure you control: on-prem, air-gapped, or inside your VPC on AWS, Azure, or OCI.
+
+**Coming soon across every surface:**
+
+| Platform | Telemetry Source | Status |
+|---|---|---|
+| **Windows** | ETW kernel + user-mode (200+ providers), PowerShell script blocks, Defender detections, AppLocker, SAC | Validating now against Atomic Red Team coverage matrix |
+| **Linux** | auditd, eBPF tracepoints, /proc filesystem, systemd journal, iptables/netfilter | Agent port underway; auditd event taxonomy mapped to stable token schema |
+| **macOS** | Endpoint Security Framework (ESF), Unified Log, osquery, OpenBSM audit | ESF subscription model aligns with ETW session architecture |
+| **Android** | adb logcat, dumpsys, /proc, SELinux AVC audit, Network Stats Manager | Planned; logcat severity/tag filtering mirrors ETW provider-level enablement |
+| **Cloud (AWS)** | CloudTrail management + data events, VPC Flow Logs, EKS audit logs, GuardDuty findings | Schema mapped; S3 event notifications align with ES bulk ingest |
+| **Cloud (Azure)** | Activity Log, Monitor resource logs, NSG flow logs, Defender for Cloud alerts, AKS audit | Schema mapped; Event Hub integration aligns with existing polling architecture |
+| **Cloud (OCI)** | Audit logs, Service Connector Hub, VCN flow logs, Cloud Guard findings | Planned; OCI audit schema compatible with CloudTrail normalization layer |
+| **Kubernetes** | API Server audit logs, admission controller webhooks, container runtime events via containerd/cri-o | Audit policy configuration published; stable token captures resource + verb + namespace tuple |
+
+Each platform generates the same stable token / payload token pair. Enrichment runs once per payload token, cached permanently, regardless of which platform produced it. A detection written against a Windows process-create event generalizes to an execve auditd event, a fork ESF event, and a container runtime event -- because they all reduce to the same behavioral skeleton. The operator experience described above is the same on every surface. This begins shipping after Windows validation, Atomic Red Team coverage measurement, and the WindOH.us pipeline reach parity.
 
 ### What the Operator Experience Should Feel Like
 
@@ -36,9 +51,9 @@ You sit down at the console. A new alert has fired. You don't know what triggere
 
 First question: **"Has this behavior been seen before, anywhere in the fleet?"** You query by stable token. The answer returns in under a second: *Yes. Seen 47,000 times across 892 endpoints over the past 90 days. Rarity: Common. First observed 18 months ago.*
 
-That changes everything. The alert is not novel — it's a known behavior that fired because a threshold moved. You close it and move on.
+That changes everything. The alert is not novel -- it's a known behavior that fired because a threshold moved. You close it and move on.
 
-Next question: **"This specific payload — these command-line arguments, this target IP — is THAT new?"** You query by payload token. *Never seen before. Enrichment triggered.* The local LLM returns a structured assessment: what the process lineage suggests, which MITRE techniques map to it, whether it looks like a LOLBin, what investigation steps to take. This enriched context is now permanently cached — every analyst who encounters this payload from this point forward gets the same intelligence, instantly, without re-running the LLM.
+Next question: **"This specific payload -- these command-line arguments, this target IP -- is THAT new?"** You query by payload token. *Never seen before. Enrichment triggered.* The local LLM returns a structured assessment: what the process lineage suggests, which MITRE techniques map to it, whether it looks like a LOLBin, what investigation steps to take. This enriched context is now permanently cached -- every analyst who encounters this payload from this point forward gets the same intelligence, instantly, without re-running the LLM.
 
 Next question: **"Assuming this is malicious, what typically follows?"** Markov chain prediction: *After this behavior, the next behavior is usually X (probability 72%) or Y (probability 18%). This observed transition has empirical probability < 1%.* That is a sequence anomaly. Worth investigating.
 
@@ -50,7 +65,7 @@ These are non-negotiable. They are the decision framework for every component, e
 
 **1. Deterministic over heuristic.** Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they do not. There is no confidence score to tune, no threshold to argue about, no training distribution to drift from. This is court-admissible, SIEM-ingestible, and immune to adversarial evasion.
 
-**2. Local-first over cloud-dependent.** LLM enrichment runs against a local endpoint — llama.cpp, Ollama, vLLM. No telemetry data transits the public internet for enrichment under any configuration. The agent operates fully independently even when Elasticsearch is unreachable, buffering to a local SQLite outbox with exponential backoff retry.
+**2. Local-first over cloud-dependent.** LLM enrichment runs against a local endpoint -- llama.cpp, Ollama, vLLM. No telemetry data transits the public internet for enrichment under any configuration. The agent operates fully independently even when Elasticsearch is unreachable, buffering to a local SQLite outbox with exponential backoff retry.
 
 **3. Observable over opaque.** Every automated decision carries provenance. A rarity band includes the decay score, observation count, and half-life parameters. A Markov anomaly flag includes the transition probability and the expected next behavior. LLM enrichment stores the raw prompt and response alongside the parsed output. The analyst can always inspect the inputs that produced the output.
 
@@ -58,13 +73,13 @@ These are non-negotiable. They are the decision framework for every component, e
 
 **5. Graceful degradation.** If Elasticsearch is unreachable, the agent buffers to SQLite outbox. If the LLM is unavailable, enrichment jobs queue without data loss. If MongoDB is unavailable, the API returns 503 with structured health status. No component failure cascades into another.
 
-**6. Human-overridable.** Every automated decision — rarity band, anomaly flag, risk assessment — is an annotation, not an enforcement action. The system recommends. The analyst decides. There is no automated blocking, quarantining, or process termination.
+**6. Human-overridable.** Every automated decision -- rarity band, anomaly flag, risk assessment -- is an annotation, not an enforcement action. The system recommends. The analyst decides. There is no automated blocking, quarantining, or process termination.
 
-**7. Reproducible execution.** Same memory dump — same SHA-256 fingerprint for every process, service, module, and network profile. Same ETW behavior — same stable token, independent of host, time, or session. Same enrichment prompt — same cached result. Idempotency is a design constraint, not an optimization.
+**7. Reproducible execution.** Same memory dump -- same SHA-256 fingerprint for every process, service, module, and network profile. Same ETW behavior -- same stable token, independent of host, time, or session. Same enrichment prompt -- same cached result. Idempotency is a design constraint, not an optimization.
 
 ### What Stays Local
 
-- All behavioral telemetry. Process command lines, network targets, user identities — the most sensitive data in a security environment.
+- All behavioral telemetry. Process command lines, network targets, user identities -- the most sensitive data in a security environment.
 - All LLM enrichment. The prompt goes to a local endpoint. The response comes back to local storage. Nothing leaves.
 - All token generation. The stable token and payload token are computed on the endpoint. Only the hashes are exported.
 - All encryption keys. DPAPI-bound to the service account. Never transmitted, never shared.
@@ -77,17 +92,19 @@ The LongHorizons agent is designed for environments where **being noticed is a f
 - **Small.** Single ~8 MB binary. No runtime, no framework, no package manager.
 - **Predictable.** Configurable memory ceiling. Configurable ETW session buffer sizes. Configurable export batch sizes. No unbounded growth.
 - **Resilient.** If the export target is unreachable, buffer locally. Retry with exponential backoff. Dead-letter after N attempts. Never crash-loop. Never drop data silently.
-- **Honest.** Emit structured diagnostics about its own health — buffer depth, export latency, dropped events, memory pressure. The agent should be the most observable component in the pipeline.
+- **Honest.** Emit structured diagnostics about its own health -- buffer depth, export latency, dropped events, memory pressure. The agent should be the most observable component in the pipeline.
 
 ### What We Refuse to Compromise On
 
-- **No telemetry leaves the premises for enrichment.** Ever. This is not a configuration option — it is an architectural invariant. There is no code path that sends event data to an external service for inference.
+- **No telemetry leaves the premises for enrichment.** Ever. This is not a configuration option -- it is an architectural invariant. There is no code path that sends event data to an external service for inference.
 
 - **No automated blocking.** The platform annotates. It recommends. It does not quarantine, terminate, or suppress. False positives in security contexts interrupt legitimate operations and destroy trust in the tool.
 
 - **No black-box outputs.** Every assessment includes explicit rationale. Every score includes its inputs. Every enrichment includes the raw LLM response that produced it. The analyst can always verify.
 
 - **No silent data loss.** If a buffer fills, it is a diagnosable event. If an export fails, it is retried and tracked. If a dead-letter queue accumulates, it surfaces in the health dashboard. Data loss must be explicit and measurable.
+
+- **No cloud requirement.** The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- operates on infrastructure you control. Internet access is only needed for external threat intelligence enrichment (SearXNG), and that is optional.
 
 ---
 
@@ -237,10 +254,10 @@ The platform is built on a set of explicitly stated engineering principles. Each
 |---|---|
 | **Deterministic over heuristic** | Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they don't. |
 | **Local-first over cloud-dependent** | LLM enrichment runs against a local endpoint. The agent operates without internet connectivity. No data exfiltration path exists. |
-| **Observable over opaque** | Every pipeline stage emits structured diagnostics. Every decision (rarity band, anomaly flag, enrichment) carries provenance — the inputs that produced it are inspectable. |
+| **Observable over opaque** | Every pipeline stage emits structured diagnostics. Every decision (rarity band, anomaly flag, enrichment) carries provenance -- the inputs that produced it are inspectable. |
 | **Safe-by-default** | Encryption at rest is mandatory. DPAPI-protected master keys. AES-256-GCM with HKDF-derived purpose-specific keys. No plaintext credentials in config files. |
 | **Graceful degradation** | If Elasticsearch is unreachable, the agent buffers to SQLite outbox with retry and dead-letter. If the LLM is unavailable, enrichment queues without data loss. No component failure cascades. |
-| **Human-overridable** | Every automated decision — rarity band, Markov anomaly flag, enrichment risk assessment — is an annotation, not a block. The analyst always has the final say. |
+| **Human-overridable** | Every automated decision -- rarity band, Markov anomaly flag, enrichment risk assessment -- is an annotation, not a block. The analyst always has the final say. |
 | **Reproducible execution** | Same memory dump → same fingerprint. Same behavior → same stable_token. Same enrichment prompt → same cached result. Idempotency by design. |
 
 See [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md) for the full set with decision rationales.
@@ -257,7 +274,7 @@ Windows detection and response is constrained by three structural inefficiencies
 
 3. **Memory forensics and forensic triage don't scale.** A single Windows memory dump requires 68 Volatility plugins run serially (2-3 hours of analyst time). Cross-case correlation across hundreds of dumps is performed manually in spreadsheets. Forensic collection on live systems requires staging multiple tools with incompatible dependencies.
 
-The core category error is treating behavioral identity as a function of timestamp, PID, and process name — when it should be a function of the behavioral skeleton itself.
+The core category error is treating behavioral identity as a function of timestamp, PID, and process name -- when it should be a function of the behavioral skeleton itself.
 
 ---
 
@@ -267,26 +284,26 @@ The core category error is treating behavioral identity as a function of timesta
 
 The LongHorizons agent decomposes each ETW event into two cryptographically distinct tokens:
 
-**Stable Token** (stable token) — A SHA-256 hash of the behavioral skeleton. Includes the deterministic, invariant fields: process lineage (parent-child relationships), operation type (ProcessCreate, DnsQuery, FileWrite), and normalized behavioral parameters with all ephemera stripped (no PIDs, no timestamps, no handles, no host identifiers). The same behavior on any host, at any time, produces the identical stable_token. This is the WHAT — what behavior occurred.
+**Stable Token** (stable token) -- A SHA-256 hash of the behavioral skeleton. Includes the deterministic, invariant fields: process lineage (parent-child relationships), operation type (ProcessCreate, DnsQuery, FileWrite), and normalized behavioral parameters with all ephemera stripped (no PIDs, no timestamps, no handles, no host identifiers). The same behavior on any host, at any time, produces the identical stable_token. This is the WHAT -- what behavior occurred.
 
-**Payload Token** (payload token) — A SHA-256 hash of the event-specific instance data. Includes the variable, evidentiary fields: command-line arguments, IP addresses, file paths, user SIDs, registry keys, and temporal context. Every event instance produces a unique payload_token, even when the stable_token is shared across thousands of occurrences. This is the WHEN/WHERE/WHO — the specific circumstances of this occurrence.
+**Payload Token** (payload token) -- A SHA-256 hash of the event-specific instance data. Includes the variable, evidentiary fields: command-line arguments, IP addresses, file paths, user SIDs, registry keys, and temporal context. Every event instance produces a unique payload_token, even when the stable_token is shared across thousands of occurrences. This is the WHEN/WHERE/WHO -- the specific circumstances of this occurrence.
 
 Consequences of this separation:
 - Same behavior = same stable_token = stored once. Measured 90-99% reduction in stored event volume.
 - Cross-host behavioral comparison reduces to an indexed hash join on stable_token.
-- "Have we ever seen this behavior before?" answers in microseconds — single lookup on stable_token.
-- Rare payloads within common behavioral patterns surface immediately — the stable_token is "normal" but the payload_token reveals anomalous arguments, targets, or context.
-- Enrichment runs once per payload token — each unique payload variant is enriched by the patterns index exactly once.
+- "Have we ever seen this behavior before?" answers in microseconds -- single lookup on stable_token.
+- Rare payloads within common behavioral patterns surface immediately -- the stable_token is "normal" but the payload_token reveals anomalous arguments, targets, or context.
+- Enrichment runs once per payload token -- each unique payload variant is enriched by the patterns index exactly once.
 
 ### 2. Recency-Weighted Baselining
 
 Raw frequency counts misrepresent normality. A behavior observed 10,000 times last year but absent for six months is not "common." A behavior observed 50 times this morning may be.
 
-The agent applies exponential decay: `score = count × e^(-λ × days_since_last_seen)`, with configurable half-life. Decay scores map to pre-computed rarity bands (Rare / Uncommon / Common) shipped with every exported event. The analyst never needs to ask "is this normal?" — the answer is in the document, with the inputs that produced it.
+The agent applies exponential decay: `score = count × e^(-λ × days_since_last_seen)`, with configurable half-life. Decay scores map to pre-computed rarity bands (Rare / Uncommon / Common) shipped with every exported event. The analyst never needs to ask "is this normal?" -- the answer is in the document, with the inputs that produced it.
 
 ### 3. Structured Inference for Behavioral Enrichment
 
-A hash is precise but opaque. The WindOH application bridges this gap: each unique stable token is sent once to a local LLM with a structured JSON prompt containing the full behavioral context — process lineage, command lines, network targets, behavioral tags, PE metadata, and inter-event timing. The LLM returns:
+A hash is precise but opaque. The WindOH application bridges this gap: each unique stable token is sent once to a local LLM with a structured JSON prompt containing the full behavioral context -- process lineage, command lines, network targets, behavioral tags, PE metadata, and inter-event timing. The LLM returns:
 
 - Plain-language behavioral description
 - MITRE ATT&CK technique mappings (with confidence)
@@ -294,7 +311,7 @@ A hash is precise but opaque. The WindOH application bridges this gap: each uniq
 - Boolean flags: LOLBin, exfiltration, privilege escalation, persistence, lateral movement
 - Suggested investigation steps
 
-Enrichment is permanently cached in MongoDB — once per payload token, never repeated. Over time the system converges toward a behavioral knowledge base where >99% of payload tokens have pre-computed context and only genuinely novel payloads reach the LLM.
+Enrichment is permanently cached in MongoDB -- once per payload token, never repeated. Over time the system converges toward a behavioral knowledge base where >99% of payload tokens have pre-computed context and only genuinely novel payloads reach the LLM.
 
 **Markov chain models** built from temporal event sequences predict what typically follows any given behavior. Transitions with empirical probability < 1% are flagged as sequence anomalies. The system surfaces not just what happened, but the deviation between observed and expected next behavior.
 
@@ -302,7 +319,7 @@ Enrichment is permanently cached in MongoDB — once per payload token, never re
 
 ## Components
 
-### LongHorizons — Endpoint Telemetry Agent
+### LongHorizons -- Endpoint Telemetry Agent
 
 **Rust. Single ~8 MB binary. No runtime dependencies. Runs as a Windows service under LocalSystem.**
 
@@ -326,34 +343,34 @@ TDH property extraction
 - Storage: SQLite WAL mode for concurrent read (exporter) and write (pipeline) access
 - Token determinism: enrichment fields use `#[serde(skip_serializing_if)]` and are excluded from hash computation
 
-### WindOH — Behavioral Intelligence Application
+### WindOH -- Behavioral Intelligence Application
 
 **TypeScript/Next.js. MongoDB + Redis + local LLM.**
 
-> **WindOH.us** — A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow will be available at [windoh.us](https://windoh.us) in the coming days. It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
+> **WindOH.us** -- A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow will be available at [windoh.us](https://windoh.us) in the coming days. It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
 
-Polls Elasticsearch for new telemetry, upserts each stable token into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) — no external API calls, no data leaving the environment.
+Polls Elasticsearch for new telemetry, upserts each stable token into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) -- no external API calls, no data leaving the environment.
 
 - **Markov sequence engine**: MongoDB aggregation pipelines compute transition probability matrices from temporal event chains. Prediction API returns top-N most probable next behaviors with probabilities, mean inter-event timing, and cross-host prevalence.
 - **Sequence anomaly detector**: flags transitions with probability < 1% using surprise scoring (-log2(P)).
 - **Atomic Red Team integration**: maps adversary emulation executions against captured telemetry by stable token, producing per-technique detection coverage metrics and gap identification.
 - **SearXNG metasearch client**: IOC enrichment, CVE lookup, and threat intel correlation from the investigation console.
 
-### LessVolatile — Memory Forensics at Scale
+### LessVolatile -- Memory Forensics at Scale
 
 **Rust. Single binary. Embeds Volatility 3 + Python 3.9. Zero install.**
 
 > **Download**: [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~129 MB)
 
-Point at a memory dump (or a directory of hundreds). Every relevant plugin runs in parallel — 68 Windows, 29 Linux, 26 macOS — using adaptive parallelism (80% of available CPU cores). All plugin output auto-converts to CSV. Each capture produces a deterministic structural fingerprint: SHA-256 hashes of process names, services, kernel modules, and network profiles for cross-case matching.
+Point at a memory dump (or a directory of hundreds). Every relevant plugin runs in parallel -- 68 Windows, 29 Linux, 26 macOS -- using adaptive parallelism (80% of available CPU cores). All plugin output auto-converts to CSV. Each capture produces a deterministic structural fingerprint: SHA-256 hashes of process names, services, kernel modules, and network profiles for cross-case matching.
 
 - Hidden process detection via PsList/PsScan delta
-- Cross-case attribution via deterministic process/service/module hashing — court-admissible, zero false positives
+- Cross-case attribution via deterministic process/service/module hashing -- court-admissible, zero false positives
 - Air-gapped operation: no Python, pip, admin rights, or internet connection required
 - Measured 97% time reduction (3 hours → 5 minutes per dump)
 - At $200/hr analyst rate: $700/dump manual → $16/dump automated
 
-### OneDriveStandaloneUpdaterr — Covert Forensic Triage
+### OneDriveStandaloneUpdaterr -- Covert Forensic Triage
 
 **Rust. Single binary. Embeds KAPE, PsExec, Hayabusa, Eric Zimmerman tools, and a raw disk imager.**
 
@@ -367,13 +384,13 @@ Single-binary forensic collection across four dimensions:
 
 Remote orchestration via embedded PsExec: copy to target via ADMIN$ share, execute as SYSTEM, poll for result zip, pull back, verify SHA-256 integrity, clean up. CPU throttled below 42%. Binary carries Microsoft OneDrive metadata to blend into normal system activity.
 
-### LessToil — Structural Codebase Intelligence
+### LessToil -- Structural Codebase Intelligence
 
 **Claude Code plugin. 40 Python modules. 56 languages. 26-table SQLite knowledge graph.**
 
 Persistent structural awareness for AI coding agents. Indexes files, symbols, and call relationships into a SQLite database with recursive CTE query capability for transitive impact analysis. Three lifecycle hooks: SessionStart (full index with architectural dashboard), PreToolUse (impact analysis, duplicate detection, governance enforcement before every edit), PostToolUse (incremental reindex of changed files).
 
-Infers 14 architectural domains with security boundary marking. Detects duplicated code via SimHash 64-bit fingerprinting. Scores temporal risk from git history (churn, bug density, ownership volatility). Tracks architectural drift across four axes. Enforces governance invariants — dangerous edits blocked before execution via exit code 2.
+Infers 14 architectural domains with security boundary marking. Detects duplicated code via SimHash 64-bit fingerprinting. Scores temporal risk from git history (churn, bug density, ownership volatility). Tracks architectural drift across four axes. Enforces governance invariants -- dangerous edits blocked before execution via exit code 2.
 
 ---
 
@@ -524,7 +541,7 @@ Edit `config.toml` to set `agent.id`, Elasticsearch endpoint, and API key. The a
 Download from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~129 MB), then:
 
 ```bash
-lessvolatile suspect.mem          # Single dump — all Windows plugins, parallel
+lessvolatile suspect.mem          # Single dump -- all Windows plugins, parallel
 lessvolatile ./cases/             # Batch process all dumps in a directory
 lessvolatile server.lime --linux  # Linux memory captures
 lessvolatile macbook.dmp --mac    # macOS memory captures
@@ -554,25 +571,25 @@ iex ((iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH
 
 WindOH was designed, architected, and built by a single engineer as an integrated platform spanning the full security operations lifecycle. The work encompasses:
 
-- **Rust systems programming** — Three independent, self-contained binaries: a real-time ETW telemetry agent with cryptographic behavioral tokenization, a parallel memory forensics launcher with embedded Volatility 3 and Python 3.9, and a covert forensic triage tool embedding KAPE, PsExec, Hayabusa, and the Eric Zimmerman tool suite.
-- **TypeScript full-stack development** — A Next.js 14 behavioral intelligence application with tRPC API layer, MongoDB persistence, BullMQ job orchestration, local LLM integration, Markov chain sequence modeling, Atomic Red Team coverage mapping, and SearXNG threat intel correlation.
-- **Python developer tooling** — A 40-module, 56-language Claude Code plugin with 26-table SQLite knowledge graph, tree-sitter AST parsing, SimHash duplicate detection, 10-phase edit verification pipeline, and architectural governance enforcement.
-- **AI/LLM integration** — Structured prompt engineering for behavioral enrichment, first-order Markov transition modeling with surprise scoring, permanent enrichment caching, and a provider-abstracted local inference architecture.
-- **Windows internals** — Native ETW Trace Data Helper (TDH) API, 47 kernel and user-mode providers, DPAPI key protection, PE header parsing, process genealogy reconstruction from PEB and logon session data.
-- **Cryptographic engineering** — Deterministic SHA-256 behavioral tokenization with stable/payload token separation, HKDF-SHA256 key derivation with purpose binding, AES-256-GCM encryption at rest, Count-Min Sketch probabilistic baselining with exponential decay.
-- **Security operations** — Detection engineering, incident response, memory forensics at scale, cross-case threat actor attribution, adversary emulation coverage analysis, and operational stealth design for forensic collection.
+- **Rust systems programming** -- Three independent, self-contained binaries: a real-time ETW telemetry agent with cryptographic behavioral tokenization, a parallel memory forensics launcher with embedded Volatility 3 and Python 3.9, and a covert forensic triage tool embedding KAPE, PsExec, Hayabusa, and the Eric Zimmerman tool suite.
+- **TypeScript full-stack development** -- A Next.js 14 behavioral intelligence application with tRPC API layer, MongoDB persistence, BullMQ job orchestration, local LLM integration, Markov chain sequence modeling, Atomic Red Team coverage mapping, and SearXNG threat intel correlation.
+- **Python developer tooling** -- A 40-module, 56-language Claude Code plugin with 26-table SQLite knowledge graph, tree-sitter AST parsing, SimHash duplicate detection, 10-phase edit verification pipeline, and architectural governance enforcement.
+- **AI/LLM integration** -- Structured prompt engineering for behavioral enrichment, first-order Markov transition modeling with surprise scoring, permanent enrichment caching, and a provider-abstracted local inference architecture.
+- **Windows internals** -- Native ETW Trace Data Helper (TDH) API, 47 kernel and user-mode providers, DPAPI key protection, PE header parsing, process genealogy reconstruction from PEB and logon session data.
+- **Cryptographic engineering** -- Deterministic SHA-256 behavioral tokenization with stable/payload token separation, HKDF-SHA256 key derivation with purpose binding, AES-256-GCM encryption at rest, Count-Min Sketch probabilistic baselining with exponential decay.
+- **Security operations** -- Detection engineering, incident response, memory forensics at scale, cross-case threat actor attribution, adversary emulation coverage analysis, and operational stealth design for forensic collection.
 
 ---
 
 ## License
 
-This software is provided under the [LongHorizons Software License v1.0](LICENSE) — a source-available, protective license that permits personal, research, and educational use at no cost. Commercial use, revenue-generating deployment, and use within for-profit entities require a separate commercial license. See the [LICENSE](LICENSE) file for full terms.
+This software is provided under the [LongHorizons Software License v1.0](LICENSE) -- a source-available, protective license that permits personal, research, and educational use at no cost. Commercial use, revenue-generating deployment, and use within for-profit entities require a separate commercial license. See the [LICENSE](LICENSE) file for full terms.
 
 ## Disclaimer
 
 These tools are provided as-is, without warranty of any kind, express or implied.
 
-These are security tools — they interact with the Windows kernel, capture forensic artifacts, execute code on remote systems, and process sensitive telemetry. Use of these tools may carry operational, legal, and compliance risk. You are solely responsible for:
+These are security tools -- they interact with the Windows kernel, capture forensic artifacts, execute code on remote systems, and process sensitive telemetry. Use of these tools may carry operational, legal, and compliance risk. You are solely responsible for:
 
 - Ensuring you have authorization to deploy these tools on any system you target
 - Complying with applicable laws, regulations, and organizational policies in your jurisdiction
