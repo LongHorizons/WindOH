@@ -69,7 +69,7 @@ $ErrorActionPreference = "Stop"
 # --- Constants -----------------------------------------------------------------
 $PLUGIN_NAME = "repo-cognition"
 $PLUGIN_DIR = Join-Path $HOME ".claude\plugins\$PLUGIN_NAME"
-$SCRIPT_DIR = Split-Path $MyInvocation.MyCommand.Path -Parent
+$SCRIPT_DIR = if ($MyInvocation.MyCommand.Path) { Split-Path $MyInvocation.MyCommand.Path -Parent } else { (Get-Location).Path }
 $TEMP_CLONE = Join-Path ([System.IO.Path]::GetTempPath()) "claude-code-plugin-$PID"
 
 # --- ANSI helpers (Windows 10+ console) ----------------------------------------
@@ -307,7 +307,7 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
             Pop-Location
         }
 
-        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "plugins\repo-cognition"
+        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "LessToil\plugin"
     } else {
         Write-Err "git not found on PATH. The installer requires git to fetch the plugin from GitHub."
         Write-Err ""
