@@ -300,7 +300,7 @@ Approximately 10-20% of source code size. A 10 MB codebase produces a 1-2 MB SQL
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
+(iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content | iex
 ```
 
 ### macOS / Linux (Bash)

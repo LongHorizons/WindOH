@@ -99,7 +99,7 @@ Options:
 Source priority: -FromZip > local clone > GitHub
 
 One-liner from GitHub:
-  irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
+  (iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content | iex
 "@ | Write-Host
     exit 0
 }

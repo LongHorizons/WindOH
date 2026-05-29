@@ -117,7 +117,7 @@ All answers are prefixed with `[index]` (queried the database) or `[grep]` (fell
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
+(iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content | iex
 ```
 
 ### macOS / Linux (Bash)
