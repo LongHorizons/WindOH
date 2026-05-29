@@ -332,6 +332,23 @@ if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     fi
 fi
 
+# If cloned dir has zip but not extracted source, extract the zip
+if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ] && [ -f "${SCRIPT_DIR}/repo-cognition.zip" ]; then
+    ZIP_SOURCE="${SCRIPT_DIR}/repo-cognition.zip"
+    ZIP_TEMP="$(mktemp -d)"
+    echo "      Extracting plugin from cloned zip..."
+    if command -v unzip &>/dev/null; then
+        unzip -q "$ZIP_SOURCE" -d "$ZIP_TEMP"
+    elif "$INSTALL_PYTHON" -c "import zipfile" 2>/dev/null; then
+        "$INSTALL_PYTHON" -c "
+import zipfile
+zf = zipfile.ZipFile('$ZIP_SOURCE')
+zf.extractall('$ZIP_TEMP')
+"
+    fi
+    SCRIPT_DIR="$ZIP_TEMP"
+fi
+
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     echo "ERROR: Plugin source not found. Ensure core/manifest.py exists in the source."
     exit 1
