@@ -191,7 +191,7 @@ Consequences of this separation:
 - Cross-host behavioral comparison reduces to an indexed hash join on base_token.
 - "Have we ever seen this behavior before?" answers in microseconds — single lookup on base_token.
 - Rare payloads within common behavioral patterns surface immediately — the base_token is "normal" but the payload_token reveals anomalous arguments, targets, or context.
-- Enrichment runs once per base_token and applies to all occurrences fleet-wide.
+- Enrichment runs once per payload token — each unique payload variant is enriched by the patterns index exactly once.
 
 ### 2. Recency-Weighted Baselining
 
@@ -209,7 +209,7 @@ A hash is precise but opaque. The WindOH application bridges this gap: each uniq
 - Boolean flags: LOLBin, exfiltration, privilege escalation, persistence, lateral movement
 - Suggested investigation steps
 
-Enrichment is permanently cached in MongoDB. Enrich once, never re-enrich. Over time the system converges toward a behavioral knowledge base where >99% of tokens have pre-computed context and only genuinely novel behaviors reach the LLM.
+Enrichment is permanently cached in MongoDB — once per payload token, never repeated. Over time the system converges toward a behavioral knowledge base where >99% of payload tokens have pre-computed context and only genuinely novel payloads reach the LLM.
 
 **Markov chain models** built from temporal event sequences predict what typically follows any given behavior. Transitions with empirical probability < 1% are flagged as sequence anomalies. The system surfaces not just what happened, but the deviation between observed and expected next behavior.
 

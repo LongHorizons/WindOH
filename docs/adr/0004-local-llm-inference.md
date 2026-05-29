@@ -20,7 +20,7 @@ Local inference was selected, with the OpenAI-compatible API protocol as the abs
 - **Data sovereignty:** Behavioral telemetry includes process command lines, network targets, and user identities — the most sensitive data in a security environment. Routing this through a third-party API creates an exfiltration surface and a compliance liability.
 - **Air-gap compatibility:** Many security environments are physically disconnected. Local inference works without internet access.
 - **Cost predictability:** Cloud API costs scale with token count and are unbounded. Local inference has a fixed hardware cost.
-- **Latency:** Local inference eliminates network round-trip (~50-200ms). For the enrichment pipeline (which runs once per novel behavior, not once per event), this is acceptable either way, but local is faster.
+- **Latency:** Local inference eliminates network round-trip (~50-200ms). For the enrichment pipeline (which runs once per novel payload token, not once per event), this is acceptable either way, but local is faster.
 - **Protocol abstraction:** Using the OpenAI-compatible chat completions API as the interface means the LLM backend can be swapped (llama.cpp → Ollama → vLLM → text-generation-webui) with a config change.
 
 ## Consequences

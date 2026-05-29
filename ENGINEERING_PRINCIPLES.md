@@ -99,7 +99,7 @@ This document records the design principles that govern all components of the Wi
 **Consequences:**
 - Same memory dump → same SHA-256 fingerprint for processes, services, modules, network profiles
 - Same ETW behavior → same base token independent of host, time, or session
-- Same base token → same LLM enrichment (enrich once, cache permanently, never re-enrich)
+- Same payload token → same LLM enrichment (enrich once per payload token, cache permanently, never re-enrich)
 - Same git commit → same LessToil index (deterministic tree-sitter parsing + SHA-256 file identity)
 
 ---
