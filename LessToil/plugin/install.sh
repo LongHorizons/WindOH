@@ -77,6 +77,29 @@ if [ "$PLUGIN_ONLY" = false ] && [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
+# --- Consent prompt -----------------------------------------------------------
+if [ "$ACCEPT" = false ]; then
+    echo ""
+    echo "=============================================="
+    echo "  LessToil Plugin v0.4.0 — Installer"
+    echo "=============================================="
+    echo ""
+    echo "  This will:"
+    echo "    * Install the repo-cognition plugin to ~/.claude/plugins/"
+    echo "    * Install Python dependencies (tree-sitter, 34 grammar packages)"
+    if [ "$PLUGIN_ONLY" = false ]; then
+        echo "    * Set up $PROJECT_DIR with a CLAUDE.md template"
+    fi
+    echo ""
+    printf "  Continue? [Y/n] "
+    read -r consent
+    if [ -n "$consent" ] && [ "$consent" != "Y" ] && [ "$consent" != "y" ]; then
+        echo "  Aborted."
+        exit 0
+    fi
+    echo ""
+fi
+
 # --- Detect Python ----------------------------------------------------------
 PYTHON=""
 for candidate in python3 python; do
@@ -87,39 +110,56 @@ for candidate in python3 python; do
     fi
 done
 
-# Auto-install Python if missing and --accept was given
-if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
-    echo "Python 3.8+ not found. --accept: attempting auto-install..."
-    if command -v apt-get &>/dev/null; then
-        echo "      Detected apt-get — installing python3..."
-        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
-    elif command -v brew &>/dev/null; then
-        echo "      Detected Homebrew — installing python3..."
-        brew install python3 2>&1 || true
-    elif command -v dnf &>/dev/null; then
-        echo "      Detected dnf — installing python3..."
-        sudo dnf install -y python3 python3-pip 2>&1 || true
-    elif command -v pacman &>/dev/null; then
-        echo "      Detected pacman — installing python3..."
-        sudo pacman -S --noconfirm python python-pip 2>&1 || true
-    elif command -v apk &>/dev/null; then
-        echo "      Detected apk — installing python3..."
-        sudo apk add python3 py3-pip 2>&1 || true
-    fi
-    # Re-detect
-    for candidate in python3 python; do
-        if command -v "$candidate" &>/dev/null; then
-            case "$("$candidate" --version 2>&1)" in
-                "Python 3."*) PYTHON="$candidate"; break ;;
-            esac
-        fi
-    done
-fi
-
 if [ -z "$PYTHON" ]; then
-    echo "ERROR: Python 3.8+ required but not found. Install from https://python.org"
-    echo "       Or re-run with --accept to attempt automatic installation."
-    exit 1
+    echo "ERROR: Python 3.8+ required but not found."
+    echo ""
+    if [ "$ACCEPT" = false ]; then
+        printf "      Attempt automatic installation? [Y/n] "
+        read -r install_python
+        if [ -z "$install_python" ] || [ "$install_python" = "Y" ] || [ "$install_python" = "y" ]; then
+            ACCEPT=true
+        else
+            echo "ERROR: Install from https://python.org and ensure it is on your PATH, then re-run."
+            exit 1
+        fi
+    fi
+    if [ "$ACCEPT" = true ]; then
+        echo "      Attempting auto-install..."
+        if command -v apt-get &>/dev/null; then
+            echo "      Detected apt-get — installing python3..."
+            sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
+        elif command -v brew &>/dev/null; then
+            echo "      Detected Homebrew — installing python3..."
+            brew install python3 2>&1 || true
+        elif command -v dnf &>/dev/null; then
+            echo "      Detected dnf — installing python3..."
+            sudo dnf install -y python3 python3-pip 2>&1 || true
+        elif command -v pacman &>/dev/null; then
+            echo "      Detected pacman — installing python3..."
+            sudo pacman -S --noconfirm python python-pip 2>&1 || true
+        elif command -v apk &>/dev/null; then
+            echo "      Detected apk — installing python3..."
+            sudo apk add python3 py3-pip 2>&1 || true
+        elif command -v winget &>/dev/null; then
+            echo "      Detected winget — installing Python 3..."
+            winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 || true
+        else
+            echo "      No package manager found. Install Python manually from https://python.org"
+        fi
+        # Re-detect
+        for candidate in python3 python; do
+            if command -v "$candidate" &>/dev/null; then
+                case "$("$candidate" --version 2>&1)" in
+                    "Python 3."*) PYTHON="$candidate"; break ;;
+                esac
+            fi
+        done
+    fi
+    if [ -z "$PYTHON" ]; then
+        echo "ERROR: Python 3.8+ still not found. Install manually from https://python.org"
+        echo "       and ensure it is on your PATH, then re-run."
+        exit 1
+    fi
 fi
 
 PY_MAJOR=$("$PYTHON" -c "import sys; print(sys.version_info[0])" 2>/dev/null || echo 0)

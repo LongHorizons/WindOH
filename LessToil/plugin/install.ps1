@@ -110,62 +110,91 @@ if (-not $PluginOnly -and -not (Test-Path $ProjectDir)) {
     exit 1
 }
 
-# --- Detect Python -------------------------------------------------------------
-$PYTHON = $null
-foreach ($candidate in @("python3", "python")) {
-    try {
-        $ver = & $candidate --version 2>&1
-        if ($ver -match "Python 3\.(\d+)") {
-            $minor = [int]$Matches[1]
-            if ($minor -ge 8) {
-                $PYTHON = $candidate
-                break
-            }
-        }
-    } catch { }
+# --- Consent prompt -----------------------------------------------------------
+if (-not $Accept) {
+    Write-Host ""
+    Write-Host "==============================================" -ForegroundColor Cyan
+    Write-Host "  LessToil Plugin v0.4.0 — Installer" -ForegroundColor Cyan
+    Write-Host "==============================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  This will:" -ForegroundColor White
+    Write-Host "    * Install the repo-cognition plugin to ~/.claude/plugins/"
+    Write-Host "    * Install Python dependencies (tree-sitter, 34 grammar packages)"
+    if (-not $PluginOnly) {
+        Write-Host "    * Set up $ProjectDir with a CLAUDE.md template"
+    }
+    Write-Host ""
+    $consent = Read-Host "  Continue? [Y/n]"
+    if ($consent -ne '' -and $consent -notmatch '^[Yy]') {
+        Write-Host "  Aborted." -ForegroundColor Yellow
+        exit 0
+    }
+    Write-Host ""
 }
 
-if (-not $PYTHON) {
-    if ($Accept) {
-        Write-Host "Python 3.8+ not found. -Accept: attempting auto-install..." -ForegroundColor Yellow
-        $installed = $false
+# --- Detect Python -------------------------------------------------------------
+function Detect-Python {
+    foreach ($candidate in @("python3", "python")) {
         try {
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Detail "Detected winget — installing Python 3..."
-                winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+            $ver = & $candidate --version 2>&1
+            if ($ver -match "Python 3\.(\d+)") {
+                $minor = [int]$Matches[1]
+                if ($minor -ge 8) { return $candidate }
+            }
+        } catch { }
+    }
+    return $null
+}
+
+function Install-PythonAuto {
+    Write-Host "      Attempting auto-install..." -ForegroundColor Yellow
+    $installed = $false
+    try {
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Write-Detail "Detected winget — installing Python 3..."
+            winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+            $installed = $true
+        }
+    } catch { }
+    if (-not $installed) {
+        try {
+            if (Get-Command choco -ErrorAction SilentlyContinue) {
+                Write-Detail "Detected Chocolatey — installing Python 3..."
+                choco install python -y 2>&1 | Out-Null
                 $installed = $true
             }
         } catch { }
-        if (-not $installed) {
-            try {
-                if (Get-Command choco -ErrorAction SilentlyContinue) {
-                    Write-Detail "Detected Chocolatey — installing Python 3..."
-                    choco install python -y 2>&1 | Out-Null
-                    $installed = $true
-                }
-            } catch { }
-        }
-        if (-not $installed) {
-            Write-Detail "No package manager found (winget/choco). Install Python manually from https://python.org"
-            Write-Detail "Then re-run this installer."
-        }
-        # Re-detect
-        foreach ($candidate in @("python3", "python")) {
-            try {
-                $ver = & $candidate --version 2>&1
-                if ($ver -match "Python 3\.(\d+)") {
-                    $minor = [int]$Matches[1]
-                    if ($minor -ge 8) {
-                        $PYTHON = $candidate
-                        break
-                    }
-                }
-            } catch { }
-        }
     }
+    if (-not $installed) {
+        Write-Detail "No package manager found (winget/choco). Install Python manually from https://python.org"
+        Write-Detail "Then re-run this installer."
+    }
+    return $installed
+}
+
+$PYTHON = Detect-Python
+
+if (-not $PYTHON) {
+    Write-Err "Python 3.8+ required but not found."
+    Write-Host ""
+
+    if (-not $Accept) {
+        $installPython = Read-Host "      Attempt automatic installation? [Y/n]"
+        if ($installPython -eq '' -or $installPython -match '^[Yy]') {
+            $null = Install-PythonAuto
+            $PYTHON = Detect-Python
+        } else {
+            Write-Err "Install from https://python.org and ensure it is on your PATH, then re-run."
+            exit 1
+        }
+    } else {
+        $null = Install-PythonAuto
+        $PYTHON = Detect-Python
+    }
+
     if (-not $PYTHON) {
-        Write-Err "Python 3.8+ required but not found. Install from https://python.org and ensure it is on your PATH."
-        Write-Err "Or re-run with -Accept to attempt automatic installation."
+        Write-Err "Python 3.8+ still not found. Install manually from https://python.org"
+        Write-Err "and ensure it is on your PATH, then re-run."
         exit 1
     }
 }
