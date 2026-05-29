@@ -134,6 +134,7 @@ if (-not $Accept) {
 
 # --- Detect Python -------------------------------------------------------------
 function Detect-Python {
+    # First try PATH
     foreach ($candidate in @("python3", "python")) {
         try {
             $ver = & $candidate --version 2>&1
@@ -142,6 +143,36 @@ function Detect-Python {
                 if ($minor -ge 8) { return $candidate }
             }
         } catch { }
+    }
+    # Scan common install directories
+    $pyDirs = @(
+        "$env:ProgramFiles\Python312",
+        "$env:ProgramFiles\Python311",
+        "$env:ProgramFiles\Python310",
+        "$env:ProgramFiles\Python39",
+        "$env:ProgramFiles\Python38",
+        "$env:LOCALAPPDATA\Programs\Python\Python312",
+        "$env:LOCALAPPDATA\Programs\Python\Python311",
+        "$env:LOCALAPPDATA\Programs\Python\Python310",
+        "$env:LOCALAPPDATA\Programs\Python\Python39",
+        "$env:LOCALAPPDATA\Programs\Python\Python38",
+        "C:\Python312", "C:\Python311", "C:\Python310", "C:\Python39", "C:\Python38"
+    )
+    foreach ($dir in $pyDirs) {
+        $pyExe = Join-Path $dir "python.exe"
+        if (Test-Path $pyExe) {
+            try {
+                $ver = & $pyExe --version 2>&1
+                if ($ver -match "Python 3\.(\d+)") {
+                    $minor = [int]$Matches[1]
+                    if ($minor -ge 8) {
+                        # Add to PATH so venv/pip work correctly
+                        $env:Path = "$dir;$dir\Scripts;" + $env:Path
+                        return $pyExe
+                    }
+                }
+            } catch { }
+        }
     }
     return $null
 }
@@ -320,19 +351,28 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
         if (Test-Path $TEMP_CLONE) { Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue }
 
         # Sparse checkout: only fetch the plugin directory
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         git clone --depth 1 --filter=blob:none --sparse "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        $cloneOk = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $prevEAP
+        if (-not $cloneOk) {
             # Fallback: full shallow clone (older git)
             Write-Detail "Sparse checkout failed, trying full shallow clone..."
             Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue
+            $ErrorActionPreference = "Continue"
             git clone --depth 1 "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
+            $cloneOk = ($LASTEXITCODE -eq 0)
+            $ErrorActionPreference = $prevEAP
+            if (-not $cloneOk) {
                 Write-Err "Failed to clone repository. Check your internet connection and GitHub access."
                 exit 1
             }
         } else {
             Push-Location $TEMP_CLONE
+            $ErrorActionPreference = "Continue"
             git sparse-checkout set "LessToil/plugin" 2>&1 | Out-Null
+            $ErrorActionPreference = $prevEAP
             Pop-Location
         }
 

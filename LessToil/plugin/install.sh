@@ -110,6 +110,30 @@ for candidate in python3 python; do
     fi
 done
 
+# Scan common install directories (Windows Git Bash / WSL)
+if [ -z "$PYTHON" ]; then
+    for pydir in \
+        "$PROGRAMFILES/Python312" "$PROGRAMFILES/Python311" "$PROGRAMFILES/Python310" \
+        "$PROGRAMFILES/Python39" "$PROGRAMFILES/Python38" \
+        "$LOCALAPPDATA/Programs/Python/Python312" "$LOCALAPPDATA/Programs/Python/Python311" \
+        "$LOCALAPPDATA/Programs/Python/Python310" "$LOCALAPPDATA/Programs/Python/Python39" \
+        "$LOCALAPPDATA/Programs/Python/Python38" \
+        "/mnt/c/Program Files/Python312" "/mnt/c/Program Files/Python311" \
+        "/mnt/c/Program Files/Python310" "/mnt/c/Program Files/Python39" \
+        "/mnt/c/Program Files/Python38" \
+        "/c/Program Files/Python312" "/c/Program Files/Python311" \
+        "/c/Program Files/Python310" "/c/Program Files/Python39" \
+        "/c/Program Files/Python38"; do
+        if [ -x "$pydir/python.exe" ]; then
+            PYTHON="$pydir/python.exe"
+            break
+        elif [ -x "$pydir/python3" ]; then
+            PYTHON="$pydir/python3"
+            break
+        fi
+    done
+fi
+
 if [ -z "$PYTHON" ]; then
     echo "ERROR: Python 3.8+ required but not found."
     echo ""
