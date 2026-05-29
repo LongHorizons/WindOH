@@ -117,14 +117,14 @@ sequenceDiagram
     participant AN as Analyst
 
     EP->>LH: ETW kernel + user-mode events (47 providers)
-    LH->>LH: Normalize → Enrich → Tokenize (base_token + payload_token)
+    LH->>LH: Normalize → Enrich → Tokenize (stable_token + payload_token)
     LH->>LH: Count-Min Sketch baselining + exponential decay scoring
     LH->>ES: gzip JSON bulk export (events, exemplars, patterns)
     
     API->>ES: Poll for new documents (configurable interval)
     ES-->>API: New event batch
     
-    API->>DB: Upsert by base_token
+    API->>DB: Upsert by stable_token
     alt Token already enriched
         DB-->>API: Return cached enrichment
     else New token
@@ -156,7 +156,7 @@ The platform is built on a set of explicitly stated engineering principles. Each
 | **Safe-by-default** | Encryption at rest is mandatory. DPAPI-protected master keys. AES-256-GCM with HKDF-derived purpose-specific keys. No plaintext credentials in config files. |
 | **Graceful degradation** | If Elasticsearch is unreachable, the agent buffers to SQLite outbox with retry and dead-letter. If the LLM is unavailable, enrichment queues without data loss. No component failure cascades. |
 | **Human-overridable** | Every automated decision — rarity band, Markov anomaly flag, enrichment risk assessment — is an annotation, not a block. The analyst always has the final say. |
-| **Reproducible execution** | Same memory dump → same fingerprint. Same behavior → same base_token. Same enrichment prompt → same cached result. Idempotency by design. |
+| **Reproducible execution** | Same memory dump → same fingerprint. Same behavior → same stable_token. Same enrichment prompt → same cached result. Idempotency by design. |
 
 See [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md) for the full set with decision rationales.
 
@@ -182,15 +182,15 @@ The core category error is treating behavioral identity as a function of timesta
 
 The LongHorizons agent decomposes each ETW event into two cryptographically distinct tokens:
 
-**Base Token** (base token) — A SHA-256 hash of the behavioral skeleton. Includes the deterministic, invariant fields: process lineage (parent-child relationships), operation type (ProcessCreate, DnsQuery, FileWrite), and normalized behavioral parameters with all ephemera stripped (no PIDs, no timestamps, no handles, no host identifiers). The same behavior on any host, at any time, produces the identical base_token. This is the WHAT — what behavior occurred.
+**Stable Token** (stable token) — A SHA-256 hash of the behavioral skeleton. Includes the deterministic, invariant fields: process lineage (parent-child relationships), operation type (ProcessCreate, DnsQuery, FileWrite), and normalized behavioral parameters with all ephemera stripped (no PIDs, no timestamps, no handles, no host identifiers). The same behavior on any host, at any time, produces the identical stable_token. This is the WHAT — what behavior occurred.
 
-**Payload Token** (payload token) — A SHA-256 hash of the event-specific instance data. Includes the variable, evidentiary fields: command-line arguments, IP addresses, file paths, user SIDs, registry keys, and temporal context. Every event instance produces a unique payload_token, even when the base_token is shared across thousands of occurrences. This is the WHEN/WHERE/WHO — the specific circumstances of this occurrence.
+**Payload Token** (payload token) — A SHA-256 hash of the event-specific instance data. Includes the variable, evidentiary fields: command-line arguments, IP addresses, file paths, user SIDs, registry keys, and temporal context. Every event instance produces a unique payload_token, even when the stable_token is shared across thousands of occurrences. This is the WHEN/WHERE/WHO — the specific circumstances of this occurrence.
 
 Consequences of this separation:
-- Same behavior = same base_token = stored once. Measured 90-99% reduction in stored event volume.
-- Cross-host behavioral comparison reduces to an indexed hash join on base_token.
-- "Have we ever seen this behavior before?" answers in microseconds — single lookup on base_token.
-- Rare payloads within common behavioral patterns surface immediately — the base_token is "normal" but the payload_token reveals anomalous arguments, targets, or context.
+- Same behavior = same stable_token = stored once. Measured 90-99% reduction in stored event volume.
+- Cross-host behavioral comparison reduces to an indexed hash join on stable_token.
+- "Have we ever seen this behavior before?" answers in microseconds — single lookup on stable_token.
+- Rare payloads within common behavioral patterns surface immediately — the stable_token is "normal" but the payload_token reveals anomalous arguments, targets, or context.
 - Enrichment runs once per payload token — each unique payload variant is enriched by the patterns index exactly once.
 
 ### 2. Recency-Weighted Baselining
@@ -201,7 +201,7 @@ The agent applies exponential decay: `score = count × e^(-λ × days_since_last
 
 ### 3. Structured Inference for Behavioral Enrichment
 
-A hash is precise but opaque. The WindOH application bridges this gap: each unique base token is sent once to a local LLM with a structured JSON prompt containing the full behavioral context — process lineage, command lines, network targets, behavioral tags, PE metadata, and inter-event timing. The LLM returns:
+A hash is precise but opaque. The WindOH application bridges this gap: each unique stable token is sent once to a local LLM with a structured JSON prompt containing the full behavioral context — process lineage, command lines, network targets, behavioral tags, PE metadata, and inter-event timing. The LLM returns:
 
 - Plain-language behavioral description
 - MITRE ATT&CK technique mappings (with confidence)
@@ -229,7 +229,7 @@ TDH property extraction
   → semantic event typing
   → process cache population
   → enrichment computation (inter-event timing, lineage, tags, burst metrics, PE metadata, network correlation, field completeness)
-  → deterministic tokenization (base_token + payload_token)
+  → deterministic tokenization (stable_token + payload_token)
   → Count-Min Sketch baselining with exponential decay
   → reservoir sampling for exemplars
   → durable SQLite outbox
@@ -247,11 +247,11 @@ TDH property extraction
 
 > **WindOH.us** — A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow will be available at [windoh.us](https://windoh.us) in the coming days. It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
 
-Polls Elasticsearch for new telemetry, upserts each base token into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) — no external API calls, no data leaving the environment.
+Polls Elasticsearch for new telemetry, upserts each stable token into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) — no external API calls, no data leaving the environment.
 
 - **Markov sequence engine**: MongoDB aggregation pipelines compute transition probability matrices from temporal event chains. Prediction API returns top-N most probable next behaviors with probabilities, mean inter-event timing, and cross-host prevalence.
 - **Sequence anomaly detector**: flags transitions with probability < 1% using surprise scoring (-log2(P)).
-- **Atomic Red Team integration**: maps adversary emulation executions against captured telemetry by base token, producing per-technique detection coverage metrics and gap identification.
+- **Atomic Red Team integration**: maps adversary emulation executions against captured telemetry by stable token, producing per-technique detection coverage metrics and gap identification.
 - **SearXNG metasearch client**: IOC enrichment, CVE lookup, and threat intel correlation from the investigation console.
 
 ### LessVolatile — Memory Forensics at Scale
@@ -474,7 +474,7 @@ WindOH was designed, architected, and built by a single engineer as an integrate
 - **Python developer tooling** — A 40-module, 56-language Claude Code plugin with 26-table SQLite knowledge graph, tree-sitter AST parsing, SimHash duplicate detection, 10-phase edit verification pipeline, and architectural governance enforcement.
 - **AI/LLM integration** — Structured prompt engineering for behavioral enrichment, first-order Markov transition modeling with surprise scoring, permanent enrichment caching, and a provider-abstracted local inference architecture.
 - **Windows internals** — Native ETW Trace Data Helper (TDH) API, 47 kernel and user-mode providers, DPAPI key protection, PE header parsing, process genealogy reconstruction from PEB and logon session data.
-- **Cryptographic engineering** — Deterministic SHA-256 behavioral tokenization with base/payload token separation, HKDF-SHA256 key derivation with purpose binding, AES-256-GCM encryption at rest, Count-Min Sketch probabilistic baselining with exponential decay.
+- **Cryptographic engineering** — Deterministic SHA-256 behavioral tokenization with stable/payload token separation, HKDF-SHA256 key derivation with purpose binding, AES-256-GCM encryption at rest, Count-Min Sketch probabilistic baselining with exponential decay.
 - **Security operations** — Detection engineering, incident response, memory forensics at scale, cross-case threat actor attribution, adversary emulation coverage analysis, and operational stealth design for forensic collection.
 
 ---

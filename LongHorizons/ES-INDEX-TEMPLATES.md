@@ -313,7 +313,7 @@ PUT _index_template/telemetry-events
 
 ### telemetry-exemplars-*
 
-Representative event samples per base token.
+Representative event samples per stable token.
 
 ```json
 PUT _index_template/telemetry-exemplars

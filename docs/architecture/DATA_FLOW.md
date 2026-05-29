@@ -18,7 +18,7 @@ sequenceDiagram
     K->>LH: ETW events (47 providers, real-time)
     LH->>LH: Phase 1: Normalize (TDH parse)
     LH->>LH: Phase 2: Enrich (lineage, tags, timing, PE metadata)
-    LH->>LH: Phase 3: Tokenize (base_token + payload_token)
+    LH->>LH: Phase 3: Tokenize (stable_token + payload_token)
     LH->>LH: Phase 4: Baseline (CMS + decay + rarity band)
     LH->>SQLite: Phase 5: Outbox write (durable)
     SQLite->>ES: Phase 6: Bulk export (gzip JSON, retry + dead-letter)
@@ -28,7 +28,7 @@ sequenceDiagram
         ES-->>API: New event batch
     end
     
-    API->>DB: Upsert by base_token
+    API->>DB: Upsert by stable_token
     
     alt Token cached
         DB-->>API: Return enrichment
@@ -88,7 +88,7 @@ ETW EVENT_RECORD
 │                                                                  │
 │ build_tokens(event, enrichments):                                │
 │                                                                  │
-│   base_fields = {                                              │
+│   stable_fields = {                                              │
 │     event_type, operation, category,                             │
 │     image_path, parent_image_path,                               │
 │     ancestor_chain_hash, tree_depth,                             │
@@ -98,7 +98,7 @@ ETW EVENT_RECORD
 │     //           IP addresses, file paths                        │
 │   }                                                              │
 │                                                                  │
-│   base_token = SHA-256(serialize(base_fields))                │
+│   stable_token = SHA-256(serialize(stable_fields))                │
 │                                                                  │
 │   payload_fields = { command_line, dest_ip, dest_port,           │
 │                      file_path, registry_key, dns_query }        │
@@ -110,18 +110,18 @@ ETW EVENT_RECORD
 ┌─────────────────────────────────────────────────────────────────┐
 │ PHASE 4: BASELINING (agent-core/pipeline.rs)                    │
 │                                                                  │
-│ 4a. shard_id = base_token[0..8]  →  pick_shard()               │
+│ 4a. shard_id = stable_token[0..8]  →  pick_shard()               │
 │                                                                  │
-│ 4b. db.upsert_base_token(base_token):                        │
+│ 4b. db.upsert_stable_token(stable_token):                        │
 │     → upsert into tokens table                                   │
 │     → compute: decay_score = count × e^(-λ × days_since_last)   │
 │     → assign rarity_band from decay_score thresholds             │
 │     → return (is_new_stable, decay_score, rarity_band, count)    │
 │                                                                  │
-│ 4c. cms.observe(base_token):                                    │
+│ 4c. cms.observe(stable_token):                                    │
 │     → increment Count-Min Sketch counters                        │
 │                                                                  │
-│ 4d. reservoir.offer(base_token, event):                         │
+│ 4d. reservoir.offer(stable_token, event):                         │
 │     → sample with richness scoring for exemplar export           │
 └──────────────────────┬──────────────────────────────────────────┘
                        │
@@ -160,14 +160,14 @@ ETW EVENT_RECORD
 │  └────────┬────────┘                                             │
 │           │                                                       │
 │           ▼                                                       │
-│  ┌─────────────────┐   upsert by base_token                     │
+│  ┌─────────────────┐   upsert by stable_token                     │
 │  │ Token Ingestor   │─────────────────────────────► ┌──────────┐ │
 │  └────────┬────────┘                               │ MongoDB  │ │
 │           │                                         │ tokens   │ │
 │           │ new token?                              └────┬─────┘ │
 │           ▼                                              │       │
 │  ┌─────────────────┐                                     │       │
-│  │ Enrichment      │  enqueue job (base_token only)     │       │
+│  │ Enrichment      │  enqueue job (stable_token only)     │       │
 │  │ Queue (BullMQ)  │──────────────────────────────────►  │       │
 │  └────────┬────────┘                                     │       │
 │           │                                              │       │
@@ -185,7 +185,7 @@ ETW EVENT_RECORD
 │  │                                                              │
 │  │  tokens           events           event_sequences           │
 │  │  ┌──────────┐     ┌──────────┐     ┌──────────┐             │
-│  │  │base_token│     │agent.id  │     │agent.id  │             │
+│  │  │stable_token│     │agent.id  │     │agent.id  │             │
 │  │  │payloads[] │     │timestamp │     │sequence[]│             │
 │  │  │enrichment │     │stable_h. │     │updated_at│             │
 │  │  │rarity     │     │payload_h.│     └──────────┘             │
@@ -222,7 +222,7 @@ ETW EVENT_RECORD
 
 ## Key Design Constraints
 
-1. **Agent-side tokenization is one-way.** The agent produces base token and payload token, never the reverse. Only the WindOH application (with the LLM) provides semantic interpretation.
+1. **Agent-side tokenization is one-way.** The agent produces stable token and payload token, never the reverse. Only the WindOH application (with the LLM) provides semantic interpretation.
 
 2. **Enrichment is idempotent and cached permanently.** A token is enriched exactly once. The raw prompt and raw response are stored for audit. Re-enrichment requires explicit operator action.
 

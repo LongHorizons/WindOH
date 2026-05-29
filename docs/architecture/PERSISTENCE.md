@@ -11,12 +11,12 @@
 │  │                          │   │                          │             │
 │  │ SQLite                   │   │ MongoDB                  │             │
 │  │ ├── tokens               │   │ ├── tokens               │             │
-│  │ │   base_token (PK)     │   │ │   base_token (unique)  │             │
+│  │ │   stable_token (PK)     │   │ │   stable_token (unique)  │             │
 │  │ │   count, decay_score   │   │ │   enrichment (cached)   │             │
 │  │ │   rarity_band          │   │ │   payload_tokens[]      │             │
 │  │ │   last_seen_at         │   │ │   rarity                │             │
 │  │ ├── events               │   │ ├── events               │             │
-│  │ │   base_token (FK)     │   │ │   agent.id + ts         │             │
+│  │ │   stable_token (FK)     │   │ │   agent.id + ts         │             │
 │  │ │   payload_token         │   │ │   full event document   │             │
 │  │ │   full event json      │   │ ├── event_sequences       │             │
 │  │ ├── outbox               │   │ │   agent.id (unique)     │             │
@@ -66,7 +66,7 @@ Retention: DELETE FROM events WHERE timestamp < now() - retention_days
 ```
 
 **Table sizing (per endpoint, 1-year estimate):**
-- `tokens`: ~10K-100K rows, ~5-50 MB (one per unique base token)
+- `tokens`: ~10K-100K rows, ~5-50 MB (one per unique stable token)
 - `events`: ~10M-50M rows, ~500 MB-2 GB (one per event, 90-day retention)
 - `outbox`: typically 0-500 rows, <10 MB
 
@@ -82,12 +82,12 @@ Retention: DELETE FROM events WHERE timestamp < now() - retention_days
 
 ### `tokens` — The Core Knowledge Base
 
-One document per unique base token. This is the permanent behavioral knowledge base.
+One document per unique stable token. This is the permanent behavioral knowledge base.
 
 ```
 {
   _id: ObjectId,
-  base_token: "abc123...",     // Unique index
+  stable_token: "abc123...",     // Unique index
   first_seen: ISODate,
   last_seen: ISODate,
   observation_count: 1423,
@@ -110,7 +110,7 @@ One document per unique base token. This is the permanent behavioral knowledge b
 
 ### `event_sequences` — Temporal Chains
 
-One document per agent, maintaining an ordered sequence of base token values.
+One document per agent, maintaining an ordered sequence of stable token values.
 
 ```
 {

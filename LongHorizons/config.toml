@@ -187,17 +187,17 @@ max_providers = 0
 
 
 # ---------------------------------------------------------------------------
-# [normalization] — How identifiers are handled for base token generation
+# [normalization] — How identifiers are handled for stable token generation
 # ---------------------------------------------------------------------------
 [normalization]
 
-# SID handling in base tokens.
+# SID handling in stable tokens.
 #   "map"      — Replace all SIDs with <sid> placeholder (deterministic tokens)
 #   "preserve" — Keep actual SIDs (tokens differ per user; useful for per-user baselines)
 # Default: "map"
 sid_handling = "map"
 
-# IP address handling in base tokens.
+# IP address handling in stable tokens.
 #   "map"      — Replace IPs with <ip> placeholder
 #   "preserve" — Keep actual IPs
 # Default: "map"
@@ -243,16 +243,16 @@ common_threshold = 50
 # Default: true
 pattern_export_daily = true
 
-# Number of top payload variants to retain per base token.
+# Number of top payload variants to retain per stable token.
 # Higher = more exemplar diversity, more storage.
 # Default: 10
 top_payload_k = 10
 
-# Reservoir size per base token (exemplars retained).
+# Reservoir size per stable token (exemplars retained).
 # Default: 3
 reservoir_size_per_base = 3
 
-# Days before refreshing exemplar events for a base token.
+# Days before refreshing exemplar events for a stable token.
 # Default: 7
 exemplar_refresh_days = 7
 
@@ -267,7 +267,7 @@ risk_score_threshold = 80
 # Default: 10
 export_threshold_score = 10
 
-# Days to wait before re-exporting the same event (by base token).
+# Days to wait before re-exporting the same event (by stable token).
 # 0 = disable dedup (every occurrence ships).
 # Default: 30
 export_dedup_days = 30
@@ -289,7 +289,7 @@ outbox_retention_seconds = 604800
 # [export.exemplars] — Exemplar event export pipeline
 # ---------------------------------------------------------------------------
 # Exemplars are individual representative events selected by the reservoir
-# sampler — one per base token per rarity boundary cross.
+# sampler — one per stable token per rarity boundary cross.
 # ---------------------------------------------------------------------------
 [export.exemplars]
 
@@ -339,7 +339,7 @@ timeout_seconds = 15
 # Default: 0
 event_rare_threshold = 0
 
-# Days before re-exporting the same exemplar base token.
+# Days before re-exporting the same exemplar stable token.
 # 0 = no dedup, always ship.
 # Default: 0
 event_dedup_days = 0
@@ -404,7 +404,7 @@ tls_pins_sha256 = []
 # Default: 10
 event_rare_threshold = 10
 
-# Days before re-exporting the same event (by base token).
+# Days before re-exporting the same event (by stable token).
 # Default: 30
 event_dedup_days = 30
 
@@ -412,7 +412,7 @@ event_dedup_days = 30
 # ---------------------------------------------------------------------------
 # [export.patterns] — Pattern/aggregation export pipeline
 # ---------------------------------------------------------------------------
-# Time-series pattern documents: aggregated statistics per base token,
+# Time-series pattern documents: aggregated statistics per stable token,
 # including count-min sketch frequencies, rarity band transitions,
 # and global/provider-level pattern summaries.
 # ---------------------------------------------------------------------------

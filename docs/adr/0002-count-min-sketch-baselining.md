@@ -6,9 +6,9 @@
 
 ## Context
 
-The LongHorizons agent must track behavioral frequency across millions of unique base token values per endpoint to assign rarity bands. Two approaches were considered:
+The LongHorizons agent must track behavioral frequency across millions of unique stable token values per endpoint to assign rarity bands. Two approaches were considered:
 
-1. **Exact counting (hash map):** Maintain a HashMap<base_token, count> in memory. O(N) memory where N is unique behaviors seen.
+1. **Exact counting (hash map):** Maintain a HashMap<stable_token, count> in memory. O(N) memory where N is unique behaviors seen.
 2. **Count-Min Sketch (CMS):** Probabilistic data structure with configurable width × depth. O(W × D) fixed memory. Under-counts with controllable error rate.
 
 ## Decision
