@@ -28,7 +28,7 @@ Every time `svchost.exe` makes a DNS query, a new event floods the SIEM — indi
 
 WindOH fixes this at the source. Same behavior = same stable token = stored once, queried in microseconds, enriched exactly once. 90--99% reduction in stored event volume before the data reaches the SIEM.
 
-The tokenization model itself is operating-system-agnostic. A behavioral skeleton — process lineage, operation type, normalized parameters with ephemera stripped — abstracts the same way whether the event originates from ETW on Windows, auditd on Linux, osquery on macOS, or CloudTrail in AWS. The same stable token / payload token separation applies: extract the invariant WHAT, isolate the instance-specific WHEN/WHERE/WHO, enrich once, cache permanently. After validation against Windows telemetry, Atomic Red Team coverage mapping, and the WindOH.us measurement pipeline, the platform extends to Linux hosts, macOS endpoints, Kubernetes audit logs, and cloud control-plane events — same architecture, same enrichment flow, same operator experience.
+The tokenization model itself is operating-system-agnostic. A behavioral skeleton — process lineage, operation type, normalized parameters with ephemera stripped — abstracts the same way whether the event originates from ETW on Windows, auditd on Linux, osquery on macOS, or CloudTrail in AWS. The same stable token / payload token separation applies: extract the invariant WHAT, isolate the instance-specific WHEN/WHERE/WHO, enrich once, cache permanently. The entire pipeline — agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis — runs on infrastructure you control: on-prem, air-gapped, or inside your VPC on AWS, Azure, or OCI. After validation against Windows telemetry, Atomic Red Team coverage mapping, and the WindOH.us measurement pipeline, the platform extends to Linux hosts, macOS endpoints, Kubernetes audit logs, and cloud control-plane events — same architecture, same enrichment flow, same operator experience.
 
 ### What the Operator Experience Should Feel Like
 
@@ -88,8 +88,6 @@ The LongHorizons agent is designed for environments where **being noticed is a f
 - **No black-box outputs.** Every assessment includes explicit rationale. Every score includes its inputs. Every enrichment includes the raw LLM response that produced it. The analyst can always verify.
 
 - **No silent data loss.** If a buffer fills, it is a diagnosable event. If an export fails, it is retried and tracked. If a dead-letter queue accumulates, it surfaces in the health dashboard. Data loss must be explicit and measurable.
-
-- **No cloud requirement.** The entire pipeline — agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis — operates on infrastructure you control. Internet access is only needed for external threat intelligence enrichment (SearXNG), and that is optional.
 
 ---
 
