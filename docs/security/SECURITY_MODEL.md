@@ -97,7 +97,7 @@ fn encrypt_event(key: &[u8; 32], event: &NormalizedEvent) -> Vec<u8> {
 }
 ```
 
-Fields excluded from encryption (needed for SQLite indexing): `id`, `timestamp`, `event_type`, `stable_hash`.
+Fields excluded from encryption (needed for SQLite indexing): `id`, `timestamp`, `event_type`, `base_token`.
 
 ---
 
@@ -135,9 +135,9 @@ Fields excluded from encryption (needed for SQLite indexing): `id`, `timestamp`,
 
 The agent exports four document types. The `events` type is the one that contains behavioral data:
 
-**Fields included in exported events:** `stable_hash`, `payload_hash`, `event_type`, `decay_score`, `rarity_band`, `behavior_tags`, `inter_event_delta_ms`, `tree_depth`, `ancestor_chain_hash`, `field_completeness_score`
+**Fields included in exported events:** `base_token`, `payload_token`, `event_type`, `decay_score`, `rarity_band`, `behavior_tags`, `inter_event_delta_ms`, `tree_depth`, `ancestor_chain_hash`, `field_completeness_score`
 
-**Fields NOT exported:** Raw command lines, raw IP addresses, raw file paths, user account names. These are available in the `exemplars` index (one per behavioral pattern, not one per event) or via the `payload_hash` which can be correlated with external data.
+**Fields NOT exported:** Raw command lines, raw IP addresses, raw file paths, user account names. These are available in the `exemplars` index (one per behavioral pattern, not one per event) or via the `payload_token` which can be correlated with external data.
 
 ### What the LLM Receives
 
@@ -159,7 +159,7 @@ If any credential is suspected compromised:
 ### Data Exposure Assessment
 
 If Elasticsearch is accessed by an unauthorized party:
-- Events contain `stable_hash` and `payload_hash` — not raw command lines or IPs directly
+- Events contain `base_token` and `payload_token` — not raw command lines or IPs directly
 - Hash preimage attacks are computationally infeasible (SHA-256)
 - Rarity bands and decay scores are aggregate statistics, not raw telemetry
 - Exemplars contain one sample per behavioral pattern — not all instances

@@ -11,13 +11,13 @@
 │  │                          │   │                          │             │
 │  │ SQLite                   │   │ MongoDB                  │             │
 │  │ ├── tokens               │   │ ├── tokens               │             │
-│  │ │   stable_hash (PK)     │   │ │   stable_hash (unique)  │             │
+│  │ │   base_token (PK)     │   │ │   base_token (unique)  │             │
 │  │ │   count, decay_score   │   │ │   enrichment (cached)   │             │
-│  │ │   rarity_band          │   │ │   payload_hashes[]      │             │
+│  │ │   rarity_band          │   │ │   payload_tokenes[]      │             │
 │  │ │   last_seen_at         │   │ │   rarity                │             │
 │  │ ├── events               │   │ ├── events               │             │
-│  │ │   stable_hash (FK)     │   │ │   agent.id + ts         │             │
-│  │ │   payload_hash         │   │ │   full event document   │             │
+│  │ │   base_token (FK)     │   │ │   agent.id + ts         │             │
+│  │ │   payload_token         │   │ │   full event document   │             │
 │  │ │   full event json      │   │ ├── event_sequences       │             │
 │  │ ├── outbox               │   │ │   agent.id (unique)     │             │
 │  │ │   payload              │   │ │   sequence[] (ordered)  │             │
@@ -66,7 +66,7 @@ Retention: DELETE FROM events WHERE timestamp < now() - retention_days
 ```
 
 **Table sizing (per endpoint, 1-year estimate):**
-- `tokens`: ~10K-100K rows, ~5-50 MB (one per unique `stable_hash`)
+- `tokens`: ~10K-100K rows, ~5-50 MB (one per unique `base_token`)
 - `events`: ~10M-50M rows, ~500 MB-2 GB (one per event, 90-day retention)
 - `outbox`: typically 0-500 rows, <10 MB
 
@@ -82,18 +82,18 @@ Retention: DELETE FROM events WHERE timestamp < now() - retention_days
 
 ### `tokens` — The Core Knowledge Base
 
-One document per unique `stable_hash`. This is the permanent behavioral knowledge base.
+One document per unique `base_token`. This is the permanent behavioral knowledge base.
 
 ```
 {
   _id: ObjectId,
-  stable_hash: "abc123...",     // Unique index
+  base_token: "abc123...",     // Unique index
   first_seen: ISODate,
   last_seen: ISODate,
   observation_count: 1423,
   decay_score: 0.87,
   rarity_band: "common",
-  payload_hashes: ["def456...", "ghi789..."],  // Top K variants
+  payload_tokenes: ["def456...", "ghi789..."],  // Top K variants
   enrichment: {
     description: "...",
     mitre_techniques: [{id: "T1059.001", name: "PowerShell", confidence: 0.9}],
@@ -110,7 +110,7 @@ One document per unique `stable_hash`. This is the permanent behavioral knowledg
 
 ### `event_sequences` — Temporal Chains
 
-One document per agent, maintaining an ordered sequence of `stable_hash` values.
+One document per agent, maintaining an ordered sequence of `base_token` values.
 
 ```
 {

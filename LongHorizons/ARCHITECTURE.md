@@ -24,7 +24,7 @@ graph TB
     subgraph Core["agent-core — Normalization & Baselining"]
         models["models.rs — NormalizedEvent (200+ fields, 15 structs)"]
         normalization["normalization.rs — SID/IP/path/guid normalization"]
-        tokenization["tokenization.rs — Deterministic stable/payload token hashing"]
+        tokenization["tokenization.rs — Deterministic base/payload token hashing"]
         pipeline["pipeline.rs — BaseliningPipeline, process cache, ES doc builder"]
         sharded["sharded_pipeline.rs — 8-way hash-sharded ingest"]
         cms["cms.rs — Count-Min Sketch"]
@@ -92,8 +92,8 @@ flowchart LR
     subgraph Phase5["Phase 5: Tokenization"]
         U --> V["build_tokens() — 38 type-specific builders"]
         V --> W["sanitize_token_value() — reject AAA=, hex pointers, numeric IDs"]
-        W --> X["stable_hash = SHA-256(behavior skeleton)"]
-        W --> Y["payload_hash = SHA-256(behavior + details)"]
+        W --> X["base_hash = SHA-256(behavior skeleton)"]
+        W --> Y["payload_token = SHA-256(behavior + details)"]
     end
 
     subgraph Phase6["Phase 6: Baselining"]
@@ -220,26 +220,26 @@ flowchart TD
     MATCH -->|"win32k/ntfs/..."| SPEC["build_win32k/ntfs/etc_tokens()"]
     MATCH -->|"other"| GEN["build_generic_tokens()"]
 
-    PS --> STABLE["proc_base_stable()\nimage_name, directory_class,\nsignature_bucket, hashes,\nparent image chain"]
-    PE --> STABLE
-    NET --> STABLE
-    DNS --> STABLE
-    REG --> STABLE
-    IMG --> STABLE
-    FILE --> STABLE
-    WMI --> STABLE
-    THR --> STABLE
-    AM --> STABLE
-    COM --> STABLE
-    RPC --> STABLE
-    SPEC --> STABLE
-    GEN --> STABLE
+    PS --> BASE["proc_base()\nimage_name, directory_class,\nsignature_bucket, hashes,\nparent image chain"]
+    PE --> BASE
+    NET --> BASE
+    DNS --> BASE
+    REG --> BASE
+    IMG --> BASE
+    FILE --> BASE
+    WMI --> BASE
+    THR --> BASE
+    AM --> BASE
+    COM --> BASE
+    RPC --> BASE
+    SPEC --> BASE
+    GEN --> BASE
 
-    STABLE --> HASH1["SHA-256 → stable_hash\n'What behavior happened?'"]
-    STABLE --> PAYLOAD["+ variable fields\n(command_line, specific IPs,\nvalues, SID, timestamps)"]
-    PAYLOAD --> HASH2["SHA-256 → payload_hash\n'What were the exact details?'"]
+    BASE --> HASH1["SHA-256 → base_hash\n'What behavior happened?'"]
+    BASE --> PAYLOAD["+ variable fields\n(command_line, specific IPs,\nvalues, SID, timestamps)"]
+    PAYLOAD --> HASH2["SHA-256 → payload_token\n'What were the exact details?'"]
 
-    HASH1 --> TOKEN["TokenPair { stable_hash, payload_hash,\nstable_canonical_json, payload_canonical_json }"]
+    HASH1 --> TOKEN["TokenPair { base_hash, payload_token,\nbase_canonical_json, payload_canonical_json }"]
     HASH2 --> TOKEN
 ```
 
@@ -249,23 +249,23 @@ flowchart TD
 
 ```mermaid
 erDiagram
-    STABLE_TOKENS {
-        blob stable_hash PK "32-byte SHA-256"
+    BASE_TOKENS {
+        blob base_hash PK "32-byte SHA-256"
         text event_type "process_start, dns_query, etc."
         text provider "ETW provider name"
         int event_id
         int total_count "Total observations"
         real decay_score "Decay-weighted frequency"
         text rarity_band "Rare, Uncommon, Common"
-        blob stable_canonical "Deterministic JSON"
+        blob base_canonical "Deterministic JSON"
         blob provider_props "Provider-specific metadata"
         int first_seen_unix
         int last_seen_unix
     }
 
     PAYLOAD_VARIANTS {
-        blob payload_hash PK "32-byte SHA-256"
-        blob stable_hash FK "Links to STABLE_TOKENS"
+        blob payload_token PK "32-byte SHA-256"
+        blob base_hash FK "Links to BASE_TOKENS"
         blob payload_canonical "Variable-detail JSON"
         int exact_count "Exact observation count"
         real decay_score
@@ -292,15 +292,15 @@ erDiagram
     }
 
     EXPORT_STATE {
-        blob stable_hash PK
+        blob base_hash PK
         int last_exemplar_unix
         blob last_exemplar_payload
         int last_pattern_unix
         text pattern_rarity_band
     }
 
-    STABLE_TOKENS ||--o{ PAYLOAD_VARIANTS : "has variants"
-    STABLE_TOKENS ||--o| EXPORT_STATE : "tracks export"
+    BASE_TOKENS ||--o{ PAYLOAD_VARIANTS : "has variants"
+    BASE_TOKENS ||--o| EXPORT_STATE : "tracks export"
 ```
 
 ---
@@ -394,7 +394,7 @@ The agent ships with **maximum data collection** defaults:
 | Allow raw fields | `true` | Include raw TDH properties in ES documents |
 | Gzip | `true` | Compress _bulk requests |
 | Decay half-life | 30 days | Recency weighting for rarity scoring |
-| Reservoir size | 100 per stable | Exemplar samples retained |
+| Reservoir size | 100 per base token | Exemplar samples retained |
 | Shard count | 8 | Independent baselining pipelines |
 | Process cache size | 2,000 | PID → identity lookups |
 | Promoted payload cache | 100,000 | Exact counting threshold |

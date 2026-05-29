@@ -148,20 +148,20 @@ curl -s http://192.168.0.133:11434/api/tags
 
 **Common causes:**
 1. LLM OOM — check `dmesg` or system logs on LLM host. Reduce context length or model size.
-2. Malformed prompt — a specific `stable_hash` has event data exceeding the LLM's context window. Skip enrichment for that token.
+2. Malformed prompt — a specific `base_token` has event data exceeding the LLM's context window. Skip enrichment for that token.
 3. LLM timeout — increase `LLM_TIMEOUT_MS` or decrease `LLM_MAX_TOKENS`.
 
 **Recovery:**
 ```bash
 # Inspect a failed job's token data
 mongosh "mongodb://localhost:27017/windoh" --eval '
-  db.tokens.findOne({"stable_hash": "<hash>"})
+  db.tokens.findOne({"base_token": "<hash>"})
 '
 
 # Force re-enrichment (clear enrichment and re-queue)
 mongosh "mongodb://localhost:27017/windoh" --eval '
   db.tokens.updateOne(
-    {"stable_hash": "<hash>"},
+    {"base_token": "<hash>"},
     {$unset: {enrichment: ""}}
   )
 '

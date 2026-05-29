@@ -138,7 +138,7 @@ interface AuditEvent {
   userId: string;
   role: string;
   operation: string;     // "tokens:enrich", "ioc:lookup", "system:configure"
-  resource: string;      // stable_hash, IP address, config key
+  resource: string;      // base_token, IP address, config key
   outcome: "success" | "failure";
   metadata: Record<string, unknown>;
 }

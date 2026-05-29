@@ -247,10 +247,10 @@ PUT _index_template/telemetry-events
 
         "tokens": {
           "properties": {
-            "stable": { "type": "keyword" },
+            "base": { "type": "keyword" },
             "payload": { "type": "keyword" },
             "schema_version": { "type": "integer" },
-            "stable_canonical": { "type": "text" },
+            "base_canonical": { "type": "text" },
             "payload_canonical": { "type": "text" }
           }
         },
@@ -313,7 +313,7 @@ PUT _index_template/telemetry-events
 
 ### telemetry-exemplars-*
 
-Representative event samples per stable token.
+Representative event samples per base token.
 
 ```json
 PUT _index_template/telemetry-exemplars
@@ -350,7 +350,7 @@ PUT _index_template/telemetry-exemplars
           }
         },
         "event_type": { "type": "keyword" },
-        "tokens.stable": { "type": "keyword" },
+        "tokens.base": { "type": "keyword" },
         "tokens.payload": { "type": "keyword" }
       }
     }
@@ -415,7 +415,7 @@ PUT _index_template/telemetry-patterns
             "agent_version": { "type": "keyword" }
           }
         },
-        "tokens.stable": { "type": "keyword" }
+        "tokens.base": { "type": "keyword" }
       }
     }
   }

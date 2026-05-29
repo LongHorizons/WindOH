@@ -11,7 +11,7 @@ This document records the design principles that govern all components of the Wi
 **Rationale:** A hash either matches or it doesn't. There is no confidence score to tune, no threshold to argue about, no training distribution to drift from. Two memory captures either share a process fingerprint or they don't. Two ETW events either represent the same behavior or they don't. This is court-admissible, SIEM-ingestible, and immune to adversarial evasion that targets ML models.
 
 **Consequences:**
-- `stable_hash` generation must be fully deterministic — same inputs, same hash, across any host, at any time
+- `base_token` generation must be fully deterministic — same inputs, same hash, across any host, at any time
 - All enrichment fields that are non-deterministic (timestamps, counters, PIDs) are excluded from hash computation via `#[serde(skip_serializing_if)]`
 - Cross-host behavioral comparison is a hash join, not a similarity search
 - No embedding vectors, no vector databases, no cosine similarity thresholds
@@ -98,8 +98,8 @@ This document records the design principles that govern all components of the Wi
 
 **Consequences:**
 - Same memory dump → same SHA-256 fingerprint for processes, services, modules, network profiles
-- Same ETW behavior → same `stable_hash` independent of host, time, or session
-- Same `stable_hash` → same LLM enrichment (enrich once, cache permanently, never re-enrich)
+- Same ETW behavior → same `base_token` independent of host, time, or session
+- Same `base_token` → same LLM enrichment (enrich once, cache permanently, never re-enrich)
 - Same git commit → same LessToil index (deterministic tree-sitter parsing + SHA-256 file identity)
 
 ---
@@ -112,7 +112,7 @@ This document records the design principles that govern all components of the Wi
 
 **Consequences:**
 - Agent → Elasticsearch: gzip-compressed JSON bulk API, configurable batch size and flush interval
-- Elasticsearch → WindOH: polling with configurable interval, idempotent upsert by `stable_hash`
+- Elasticsearch → WindOH: polling with configurable interval, idempotent upsert by `base_token`
 - WindOH → LLM: OpenAI-compatible chat completions API, structured JSON response format
 - All cross-component communication uses explicit schemas, not ad-hoc formats
 - Each component can be developed, tested, and deployed independently

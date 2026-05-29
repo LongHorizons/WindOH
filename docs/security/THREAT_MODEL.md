@@ -134,7 +134,7 @@
 **Impact:** Persistent bad intelligence in the behavioral knowledge base. Incorrect MITRE mappings, suppressed risk assessments.
 
 **Mitigations:**
-- Enrichment runs exactly once per `stable_hash`. If bad enrichment is stored, the operator can delete the token document and re-trigger enrichment.
+- Enrichment runs exactly once per `base_token`. If bad enrichment is stored, the operator can delete the token document and re-trigger enrichment.
 - All enrichment carries provenance: the raw prompt and raw response are stored alongside the parsed output. An operator can audit enrichment quality.
 - The enrichment provides a suggested investigation step — it guides the analyst, it does not automate response.
 
@@ -147,7 +147,7 @@
 **Mitigations:**
 - Redis is deployed on the application host's internal network. No external access.
 - Redis AUTH password is configured.
-- BullMQ jobs contain only `stable_hash` references, not the full event data. Event data is read from MongoDB.
+- BullMQ jobs contain only `base_token` references, not the full event data. Event data is read from MongoDB.
 
 ### 7. DPAPI Key Extraction
 
