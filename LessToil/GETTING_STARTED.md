@@ -66,7 +66,7 @@ If Python is not found on Windows, run `where.exe python`. If missing, install f
 Run from your project directory:
 
 ```powershell
-(iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content | iex
+iex ((iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content)
 ```
 
 #### From Local Clone
