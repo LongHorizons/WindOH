@@ -222,7 +222,7 @@ ETW EVENT_RECORD
 
 ## Key Design Constraints
 
-1. **Agent-side tokenization is one-way.** The agent produces `base_token` and `payload_token`, never the reverse. Only the WindOH application (with the LLM) provides semantic interpretation.
+1. **Agent-side tokenization is one-way.** The agent produces base token and payload token, never the reverse. Only the WindOH application (with the LLM) provides semantic interpretation.
 
 2. **Enrichment is idempotent and cached permanently.** A token is enriched exactly once. The raw prompt and raw response are stored for audit. Re-enrichment requires explicit operator action.
 

@@ -44,7 +44,7 @@ WindOH uses BullMQ (backed by Redis) for asynchronous job processing. Three queu
 - **Rate limiting:** Configurable `rateLimiter` prevents overwhelming the LLM endpoint (default: max 10 jobs/second).
 - **Concurrency control:** `concurrency: 2` (configurable) ensures at most N LLM requests in flight simultaneously.
 
-**Job data minimization:** Enrichment jobs contain only the `base_token` — not the full event data. The worker reads event data from MongoDB at execution time. This avoids storing potentially large event documents in Redis.
+**Job data minimization:** Enrichment jobs contain only the base token — not the full event data. The worker reads event data from MongoDB at execution time. This avoids storing potentially large event documents in Redis.
 
 **Idempotency:** Workers check if a token already has `enrichment.description` before calling the LLM. If enrichment was completed by another worker between queue and dequeue, the job is a no-op.
 

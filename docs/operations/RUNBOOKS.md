@@ -148,7 +148,7 @@ curl -s http://192.168.0.133:11434/api/tags
 
 **Common causes:**
 1. LLM OOM — check `dmesg` or system logs on LLM host. Reduce context length or model size.
-2. Malformed prompt — a specific `base_token` has event data exceeding the LLM's context window. Skip enrichment for that token.
+2. Malformed prompt — a specific base token has event data exceeding the LLM's context window. Skip enrichment for that token.
 3. LLM timeout — increase `LLM_TIMEOUT_MS` or decrease `LLM_MAX_TOKENS`.
 
 **Recovery:**

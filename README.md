@@ -182,9 +182,9 @@ The core category error is treating behavioral identity as a function of timesta
 
 The LongHorizons agent decomposes each ETW event into two cryptographically distinct tokens:
 
-**Base Token** (`base_token`) — A SHA-256 hash of the behavioral skeleton. Includes the deterministic, invariant fields: process lineage (parent-child relationships), operation type (ProcessCreate, DnsQuery, FileWrite), and normalized behavioral parameters with all ephemera stripped (no PIDs, no timestamps, no handles, no host identifiers). The same behavior on any host, at any time, produces the identical base_token. This is the WHAT — what behavior occurred.
+**Base Token** (base token) — A SHA-256 hash of the behavioral skeleton. Includes the deterministic, invariant fields: process lineage (parent-child relationships), operation type (ProcessCreate, DnsQuery, FileWrite), and normalized behavioral parameters with all ephemera stripped (no PIDs, no timestamps, no handles, no host identifiers). The same behavior on any host, at any time, produces the identical base_token. This is the WHAT — what behavior occurred.
 
-**Payload Token** (`payload_token`) — A SHA-256 hash of the event-specific instance data. Includes the variable, evidentiary fields: command-line arguments, IP addresses, file paths, user SIDs, registry keys, and temporal context. Every event instance produces a unique payload_token, even when the base_token is shared across thousands of occurrences. This is the WHEN/WHERE/WHO — the specific circumstances of this occurrence.
+**Payload Token** (payload token) — A SHA-256 hash of the event-specific instance data. Includes the variable, evidentiary fields: command-line arguments, IP addresses, file paths, user SIDs, registry keys, and temporal context. Every event instance produces a unique payload_token, even when the base_token is shared across thousands of occurrences. This is the WHEN/WHERE/WHO — the specific circumstances of this occurrence.
 
 Consequences of this separation:
 - Same behavior = same base_token = stored once. Measured 90-99% reduction in stored event volume.
@@ -201,7 +201,7 @@ The agent applies exponential decay: `score = count × e^(-λ × days_since_last
 
 ### 3. Structured Inference for Behavioral Enrichment
 
-A hash is precise but opaque. The WindOH application bridges this gap: each unique `base_token` is sent once to a local LLM with a structured JSON prompt containing the full behavioral context — process lineage, command lines, network targets, behavioral tags, PE metadata, and inter-event timing. The LLM returns:
+A hash is precise but opaque. The WindOH application bridges this gap: each unique base token is sent once to a local LLM with a structured JSON prompt containing the full behavioral context — process lineage, command lines, network targets, behavioral tags, PE metadata, and inter-event timing. The LLM returns:
 
 - Plain-language behavioral description
 - MITRE ATT&CK technique mappings (with confidence)
@@ -247,11 +247,11 @@ TDH property extraction
 
 > **WindOH.us** — A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow will be available at [windoh.us](https://windoh.us) in the coming days. It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
 
-Polls Elasticsearch for new telemetry, upserts each `base_token` into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) — no external API calls, no data leaving the environment.
+Polls Elasticsearch for new telemetry, upserts each base token into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) — no external API calls, no data leaving the environment.
 
 - **Markov sequence engine**: MongoDB aggregation pipelines compute transition probability matrices from temporal event chains. Prediction API returns top-N most probable next behaviors with probabilities, mean inter-event timing, and cross-host prevalence.
 - **Sequence anomaly detector**: flags transitions with probability < 1% using surprise scoring (-log2(P)).
-- **Atomic Red Team integration**: maps adversary emulation executions against captured telemetry by `base_token`, producing per-technique detection coverage metrics and gap identification.
+- **Atomic Red Team integration**: maps adversary emulation executions against captured telemetry by base token, producing per-technique detection coverage metrics and gap identification.
 - **SearXNG metasearch client**: IOC enrichment, CVE lookup, and threat intel correlation from the investigation console.
 
 ### LessVolatile — Memory Forensics at Scale

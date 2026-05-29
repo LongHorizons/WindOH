@@ -13,7 +13,7 @@
 │  │ ├── tokens               │   │ ├── tokens               │             │
 │  │ │   base_token (PK)     │   │ │   base_token (unique)  │             │
 │  │ │   count, decay_score   │   │ │   enrichment (cached)   │             │
-│  │ │   rarity_band          │   │ │   payload_tokenes[]      │             │
+│  │ │   rarity_band          │   │ │   payload_tokens[]      │             │
 │  │ │   last_seen_at         │   │ │   rarity                │             │
 │  │ ├── events               │   │ ├── events               │             │
 │  │ │   base_token (FK)     │   │ │   agent.id + ts         │             │
@@ -66,7 +66,7 @@ Retention: DELETE FROM events WHERE timestamp < now() - retention_days
 ```
 
 **Table sizing (per endpoint, 1-year estimate):**
-- `tokens`: ~10K-100K rows, ~5-50 MB (one per unique `base_token`)
+- `tokens`: ~10K-100K rows, ~5-50 MB (one per unique base token)
 - `events`: ~10M-50M rows, ~500 MB-2 GB (one per event, 90-day retention)
 - `outbox`: typically 0-500 rows, <10 MB
 
@@ -82,7 +82,7 @@ Retention: DELETE FROM events WHERE timestamp < now() - retention_days
 
 ### `tokens` — The Core Knowledge Base
 
-One document per unique `base_token`. This is the permanent behavioral knowledge base.
+One document per unique base token. This is the permanent behavioral knowledge base.
 
 ```
 {
@@ -93,7 +93,7 @@ One document per unique `base_token`. This is the permanent behavioral knowledge
   observation_count: 1423,
   decay_score: 0.87,
   rarity_band: "common",
-  payload_tokenes: ["def456...", "ghi789..."],  // Top K variants
+  payload_tokens: ["def456...", "ghi789..."],  // Top K variants
   enrichment: {
     description: "...",
     mitre_techniques: [{id: "T1059.001", name: "PowerShell", confidence: 0.9}],
@@ -110,7 +110,7 @@ One document per unique `base_token`. This is the permanent behavioral knowledge
 
 ### `event_sequences` — Temporal Chains
 
-One document per agent, maintaining an ordered sequence of `base_token` values.
+One document per agent, maintaining an ordered sequence of base token values.
 
 ```
 {

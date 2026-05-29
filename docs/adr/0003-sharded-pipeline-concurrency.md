@@ -11,7 +11,7 @@ The LongHorizons agent processes ETW events at kernel-provider throughput (poten
 Two concurrency models were considered:
 
 1. **Actor model (e.g., Actix):** Each pipeline stage is an actor. Events flow through message passing between actors. Backpressure via mailbox capacity.
-2. **Hash-sharded pipeline:** Pre-compute `base_token`, route to one of N independent shards by hash prefix. Each shard owns its own CMS, reservoir, and process cache. Shards share nothing.
+2. **Hash-sharded pipeline:** Pre-compute base token, route to one of N independent shards by hash prefix. Each shard owns its own CMS, reservoir, and process cache. Shards share nothing.
 
 ## Decision
 

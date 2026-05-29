@@ -20,7 +20,7 @@ flowchart LR
         SAN["Sanitization\nBOM-aware UTF-16\ngarbage detection"]
         SEM["Semantic Classification\n38 event types\nprovider-agnostic"]
         ENRICH["Enrichment\nPEB cmdline, NTSTATUS,\nDNS codes, integrity,\nparent backfill"]
-        TOK["Tokenization\nbase_hash + payload_token\nSHA-256 deterministic"]
+        TOK["Tokenization\nbase_token + payload_token\nSHA-256 deterministic"]
         BASE["Baselining\nCMS frequency, decay scoring,\nreservoir sampling"]
         OUT["Outbox\nPriority queue\ndedup + retry"]
     end
@@ -59,13 +59,13 @@ flowchart TD
     end
 
     subgraph Tokens["Cryptographic Hashing"]
-        E1 --> S1["base_hash: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
+        E1 --> S1["base_token: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
         E1 --> P1["payload_token: d4e5f6...\n'whoami.exe at 9:05 AM'\n(unique)"]
 
-        E2 --> S2["base_hash: a1b2c3...\n(same — identical behavior)"]
+        E2 --> S2["base_token: a1b2c3...\n(same — identical behavior)"]
         E2 --> P2["payload_token: g7h8i9...\n'whoami.exe at 10:22 AM'\n(unique)"]
 
-        E3 --> S3["base_hash: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
+        E3 --> S3["base_token: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
         E3 --> P3["payload_token: m3n4o5...\n'net.exe user at 9:06 AM'\n(unique)"]
     end
 
@@ -141,7 +141,7 @@ flowchart TD
 | **WMI** | `operation`, `namespace`, `query`, `consumer`, `status` (translated) | WMI activity monitoring |
 | **Inter-event** | `delta_ms_since_prev`, `delta_ms_since_process_start`, `burst_count_5s`, `burst_count_60s` | Timing and burst context |
 | **Behavioral** | `behavior_tags`, `process_classification`, `tree_depth`, `ancestor_chain_hash` | Heuristic tags + lineage |
-| **Tokenization** | `base_hex`, `payload_hex`, `base_canonical`, `payload_canonical` | Deterministic behavioral hashes |
+| **Tokenization** | base hex, `payload_hex`, `base_canonical`, `payload_canonical` | Deterministic behavioral hashes |
 | **Provider** | `provider_properties` | All TDH properties, stringified for ES type safety |
 
 
@@ -157,9 +157,9 @@ The agent transforms Windows telemetry from a cost center into an intelligence a
 |---|---|---|
 | **Daily storage per endpoint** | 5–20 GB | 50–200 MB |
 | **Identical events stored** | Every single one | Once + counter |
-| **Time to answer "is this new?"** | Hours of search | Instant (base hash lookup) |
+| **Time to answer "is this new?"** | Hours of search | Instant (base token lookup) |
 | **Time to answer "is this normal?"** | Requires manual hunting | Decay score + rarity band, precomputed |
-| **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic base hash |
+| **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic base token |
 | **Investigation surface** | Every event | Rare + uncommon events only |
 | **LLM enrichment ready** | No (no relational context) | Yes (timing, lineage, burst, behavior tags precomputed) |
 | **Data cleanliness** | Raw, unvalidated | Sanitized: no AAA=, no mojibake, no hex pointers, all codes human-readable |
@@ -170,7 +170,7 @@ The agent transforms Windows telemetry from a cost center into an intelligence a
 
 The agent produces a **deterministic, deduplicated behavioral corpus** — every Windows kernel and user-mode operation from 200+ ETW providers, cryptographically indexed by behavioral identity:
 
-- **Reproducible research**: `base_hash` is deterministic — two researchers observing the same behavior on different machines get the same hash. Results are independently verifiable.
+- **Reproducible research**: base token is deterministic — two researchers observing the same behavior on different machines get the same hash. Results are independently verifiable.
 - **Cross-system behavioral phylogenetics**: Track how behaviors evolve across Windows versions, patch levels, and configurations. The same hash means the same behavior, regardless of hostname, PID, or timestamp.
 - **Kernel operation taxonomy**: Every NTFS file operation, every registry key touch, every network connection, every process creation — classified, counted, and rarity-scored. Build a complete behavioral map of Windows.
 - **Longitudinal studies**: Decay-weighted baselining with 30-day half-life means frequency scores self-calibrate. "What behaviors became more common after the May 2026 patch?" — answerable in one query.
@@ -189,7 +189,7 @@ flowchart LR
     end
 
     subgraph LongHorizons["LongHorizons Detection"]
-        L1["Tokenized event stream"] --> L2["Rarity band lookup\n(base hash → DB)"]
+        L1["Tokenized event stream"] --> L2["Rarity band lookup\n(base token → DB)"]
         L2 -->|"RARE: never seen before"| L3["Immediate exemplar export\nFull event + lineage + timing"]
         L2 -->|"UNCOMMON: seen <20 times"| L4["Flagged for review\nLow-frequency pattern"]
         L2 -->|"COMMON: seen 23,847 times"| L5["Counter incremented\nNo alert, no storage"]
@@ -209,7 +209,7 @@ flowchart LR
 | **Lateral movement** | `network_connect` + `source_image` — cross-process network correlation |
 | **Token theft** | `logon_id` mismatch — process running under different logon session than parent |
 | **Obfuscated execution** | `command_line_analysis.obfuscation_score` ≥ 2 — base64, caret escaping, string splitting |
-| **Cross-host hunting** | `base_hash` lookup across all hosts — "show me everywhere this behavior occurred" |
+| **Cross-host hunting** | base token lookup across all hosts — "show me everywhere this behavior occurred" |
 
 ### Understanding Windows — What the Kernel Tells You
 
@@ -267,7 +267,7 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 **SOC Triage**: Rare events surface immediately. Common events are pre-scored and deduplicated. Analysts spend time on novel signals, not the 400th `svchost.exe` DNS lookup.
 
-**Threat Hunting**: Query across all endpoints by `base_hash`. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
+**Threat Hunting**: Query across all endpoints by base token. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
 
 **Incident Response**: Reconstruct full process trees with command lines from the PEB, inter-event timing deltas, 3-generation ancestry, and cross-process network correlation.
 
@@ -277,7 +277,7 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 **Windows Internals Research**: Every kernel subsystem's operations, decoded and queryable. Build a behavioral taxonomy of Windows without a kernel debugger.
 
-**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by `base_hash`. Measure detection coverage, identify gaps, validate SIEM rules.
+**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by base token. Measure detection coverage, identify gaps, validate SIEM rules.
 
 **Forensics**: Event timeline with inter-event timing, process lineage, and full command lines. All codes decoded. All paths normalized. No raw hex values to decipher.
 

@@ -10,7 +10,7 @@ WindOH is a TypeScript/MongoDB web application that consumes telemetry from the 
 
 ### 1.1 Core Value Proposition
 
-The LongHorizons agent produces cryptographically stable behavioral tokens (`base_token` and `payload_token`) at wire speed. But a hash alone doesn't tell an analyst *what the behavior means*. WindOH closes that gap:
+The LongHorizons agent produces cryptographically stable behavioral tokens (base token and payload token) at wire speed. But a hash alone doesn't tell an analyst *what the behavior means*. WindOH closes that gap:
 
 ```
 base_token: a1b2c3... → "cmd.exe spawned whoami.exe from a temp directory
@@ -71,12 +71,12 @@ Every token in the system gets enriched once by the LLM, cached in MongoDB, and 
 ### 2.1 Data Flow
 
 1. **Ingest**: WindOH polls Elasticsearch `longhorizons-events`, `longhorizons-exemplars`, and `longhorizons-patterns` indexes for new documents
-2. **Token Extraction**: Extract `base_token`, `payload_token`, and all enrichment fields from each event
-3. **MongoDB Upsert**: Each unique `base_token` gets a document in the `tokens` collection. Known tokens update counters; unknown tokens trigger enrichment
+2. **Token Extraction**: Extract base token, payload token, and all enrichment fields from each event
+3. **MongoDB Upsert**: Each unique base token gets a document in the `tokens` collection. Known tokens update counters; unknown tokens trigger enrichment
 4. **LLM Enrichment** (new tokens only): The enrichment pipeline sends a structured prompt to the local LLM. Response is parsed and stored
 5. **Sequence Recording**: Each `agent.id` has an event sequence. Tokens are appended in temporal order for Markov modeling
 6. **Markov Training**: Periodic background job rebuilds transition probability matrices from sequence data
-7. **Atomic Red Team Mapping**: When ART tests run, their telemetry is cross-referenced by `base_token` to measure detection coverage
+7. **Atomic Red Team Mapping**: When ART tests run, their telemetry is cross-referenced by base token to measure detection coverage
 8. **SearXNG Integration**: IOCs (IPs, domains, hashes) extracted from events are enriched via SearXNG metasearch
 
 ---
@@ -85,7 +85,7 @@ Every token in the system gets enriched once by the LLM, cached in MongoDB, and 
 
 ### 3.1 `tokens` Collection
 
-The central collection. One document per unique `base_token`.
+The central collection. One document per unique base token.
 
 ```typescript
 // models/Token.ts
@@ -94,7 +94,7 @@ interface IToken {
 
   // ── Identity ──
   base_token: string;            // Indexed, unique — the behavioral fingerprint
-  payload_tokenes: string[];       // Top K payload variants seen
+  payload_tokens: string[];       // Top K payload variants seen
 
   // ── LLM Enrichment (cached) ──
   enrichment: {
@@ -269,7 +269,7 @@ interface IAtomicTest {
   // Coverage
   coverage: {
     events_captured: number;       // How many ETW events fired
-    tokens_generated: number;      // Unique base tokenes observed
+    tokens_generated: number;      // Unique base tokens observed
     tokens_pre_enriched: number;   // How many tokens already existed (known behavior)
     tokens_new: number;            // How many tokens were unknown (new behavior)
     detection_gap: boolean;        // true if any expected behavior was NOT captured
@@ -500,7 +500,7 @@ async function pollNewEvents() {
       {
         $setOnInsert: {
           base_token: baseToken,
-          payload_tokenes: [],
+          payload_tokens: [],
           enrichment_status: 'pending',
           enrichment_attempts: 0,
           first_seen: new Date(),
@@ -520,7 +520,7 @@ async function pollNewEvents() {
         },
         $inc: { total_occurrences: 1 },
         $addToSet: {
-          payload_tokenes: { $each: [src.payload_hex || src.payload_token].filter(Boolean) },
+          payload_tokens: { $each: [src.payload_hex || src.payload_token].filter(Boolean) },
           host_ids: src.agent?.id,
         },
       },
@@ -559,7 +559,7 @@ setInterval(pollNewEvents, 10_000);
 
 ### 5.1 Concept
 
-Each agent produces a temporally ordered sequence of `base_token` values. Over thousands of endpoints and millions of events, these sequences reveal predictable behavioral chains:
+Each agent produces a temporally ordered sequence of base token values. Over thousands of endpoints and millions of events, these sequences reveal predictable behavioral chains:
 
 ```
 A → B → C with P=0.74  (e.g., cmd.exe start → whoami.exe → net.exe localgroup)
@@ -1498,7 +1498,7 @@ ES_POLL_INTERVAL_SECONDS=10
 | **MongoDB over PostgreSQL** | Token enrichment is deeply nested and variable-depth — one base_token may have 2 MITRE techniques while another has 6. Document model avoids EAV pattern or sparse columns. Atlas Search provides built-in full-text search without Elasticsearch dependency for the web app itself. |
 | **BullMQ over in-process queues** | LLM enrichment can take 5-30 seconds per token. 47 providers × thousands of events = many unique tokens on first run. Redis-backed queues survive restarts, provide dashboards, and support rate limiting to avoid overwhelming the local LLM. |
 | **Poll Elasticsearch, don't stream** | The LongHorizons agent already deduplicates and batches. Polling every 10 seconds is simpler than maintaining a persistent ES scroll, handles ES restarts gracefully, and the 10s latency is acceptable for enrichment (which itself takes seconds). |
-| **Markov first-order with N-order extension path** | First-order (bigram) captures 80% of predictive value at a fraction of the state space. The architecture supports N-order extension via the `prev_base_token` chain in event sequences — the transition builder can be upgraded without schema changes. |
+| **Markov first-order with N-order extension path** | First-order (bigram) captures 80% of predictive value at a fraction of the state space. The architecture supports N-order extension via the previous base token chain in event sequences — the transition builder can be upgraded without schema changes. |
 | **Enrich once, cache forever** | The base_token is cryptographically deterministic. The same hash always means the same behavior. Enriching it once and caching in MongoDB means the LLM cost per token is fixed, regardless of how many millions of times the behavior occurs. This is the central design insight of the entire system. |
 | **Separate search_cache collection** | SearXNG results change over time. A 7-day TTL with re-search ensures threat intel stays fresh without hammering the metasearch engine. |
 

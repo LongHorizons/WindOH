@@ -92,7 +92,7 @@ flowchart LR
     subgraph Phase5["Phase 5: Tokenization"]
         U --> V["build_tokens() — 38 type-specific builders"]
         V --> W["sanitize_token_value() — reject AAA=, hex pointers, numeric IDs"]
-        W --> X["base_hash = SHA-256(behavior skeleton)"]
+        W --> X["base_token = SHA-256(behavior skeleton)"]
         W --> Y["payload_token = SHA-256(behavior + details)"]
     end
 
@@ -235,11 +235,11 @@ flowchart TD
     SPEC --> BASE
     GEN --> BASE
 
-    BASE --> HASH1["SHA-256 → base_hash\n'What behavior happened?'"]
+    BASE --> HASH1["SHA-256 → base_token\n'What behavior happened?'"]
     BASE --> PAYLOAD["+ variable fields\n(command_line, specific IPs,\nvalues, SID, timestamps)"]
     PAYLOAD --> HASH2["SHA-256 → payload_token\n'What were the exact details?'"]
 
-    HASH1 --> TOKEN["TokenPair { base_hash, payload_token,\nbase_canonical_json, payload_canonical_json }"]
+    HASH1 --> TOKEN["TokenPair { base_token, payload_token,\nbase_canonical_json, payload_canonical_json }"]
     HASH2 --> TOKEN
 ```
 
@@ -250,7 +250,7 @@ flowchart TD
 ```mermaid
 erDiagram
     BASE_TOKENS {
-        blob base_hash PK "32-byte SHA-256"
+        blob base_token PK "32-byte SHA-256"
         text event_type "process_start, dns_query, etc."
         text provider "ETW provider name"
         int event_id
@@ -265,7 +265,7 @@ erDiagram
 
     PAYLOAD_VARIANTS {
         blob payload_token PK "32-byte SHA-256"
-        blob base_hash FK "Links to BASE_TOKENS"
+        blob base_token FK "Links to BASE_TOKENS"
         blob payload_canonical "Variable-detail JSON"
         int exact_count "Exact observation count"
         real decay_score
@@ -292,7 +292,7 @@ erDiagram
     }
 
     EXPORT_STATE {
-        blob base_hash PK
+        blob base_token PK
         int last_exemplar_unix
         blob last_exemplar_payload
         int last_pattern_unix
