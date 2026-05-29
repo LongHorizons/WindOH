@@ -28,6 +28,8 @@ Every time `svchost.exe` makes a DNS query, a new event floods the SIEM — indi
 
 WindOH fixes this at the source. Same behavior = same stable token = stored once, queried in microseconds, enriched exactly once. 90--99% reduction in stored event volume before the data reaches the SIEM.
 
+The tokenization model itself is operating-system-agnostic. A behavioral skeleton — process lineage, operation type, normalized parameters with ephemera stripped — abstracts the same way whether the event originates from ETW on Windows, auditd on Linux, osquery on macOS, or CloudTrail in AWS. The same stable token / payload token separation applies: extract the invariant WHAT, isolate the instance-specific WHEN/WHERE/WHO, enrich once, cache permanently. After validation against Windows telemetry, Atomic Red Team coverage mapping, and the WindOH.us measurement pipeline, the platform extends to Linux hosts, macOS endpoints, Kubernetes audit logs, and cloud control-plane events — same architecture, same enrichment flow, same operator experience.
+
 ### What the Operator Experience Should Feel Like
 
 You sit down at the console. A new alert has fired. You don't know what triggered it.
