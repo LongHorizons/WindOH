@@ -432,7 +432,8 @@ if (Test-Path $hooksJsonPath) {
     $pythonAbs = (Get-Command $INSTALL_PYTHON -ErrorAction SilentlyContinue).Source
     if (-not $pythonAbs) { $pythonAbs = $INSTALL_PYTHON }
     $hooksContent = Get-Content $hooksJsonPath -Raw -Encoding UTF8
-    $hooksContent = $hooksContent -replace '"python "', '"' + $pythonAbs + ' "'
+    $hookReplacement = '"' + $pythonAbs + ' "'
+    $hooksContent = $hooksContent -replace '"python "', $hookReplacement
     Set-Content -Path $hooksJsonPath -Value $hooksContent -Encoding UTF8 -NoNewline
     Write-Detail "hooks.json: using $pythonAbs"
 }
@@ -634,7 +635,8 @@ if (-not $PluginOnly) {
             $members = [regex]::Matches($cargoContent, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
             if ($members) { $WORKSPACE_INFO = "Workspace crates: $($members -join ' ')" }
         }
-    } elseif (Get-ChildItem $ProjectDir -Filter *.ts,*.tsx -ErrorAction SilentlyContinue | Select-Object -First 1) {
+    } elseif ((Get-ChildItem $ProjectDir -Filter *.ts -ErrorAction SilentlyContinue | Select-Object -First 1) -or
+               (Get-ChildItem $ProjectDir -Filter *.tsx -ErrorAction SilentlyContinue | Select-Object -First 1)) {
         $LANG_HINT = "TypeScript"
     } elseif (Get-ChildItem $ProjectDir -Filter *.py -ErrorAction SilentlyContinue | Select-Object -First 1) {
         $LANG_HINT = "Python"
