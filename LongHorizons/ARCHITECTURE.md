@@ -1,184 +1,364 @@
 # Architecture — LongHorizons Telemetry Agent
 
-## Crate Map
+## Crate Dependency Graph
 
 ```mermaid
 graph TB
-    subgraph service ["agent-service (binary crate)"]
-        main["main.rs, service.rs<br/>health.rs, diagnostic.rs<br/>Windows service wrapper + CLI"]
+    subgraph Binary["agent-service (binary)"]
+        main["main.rs — CLI + Windows Service"]
+        health["health.rs — HTTP health endpoint"]
+        diagnostic["diagnostic.rs — self-monitoring"]
     end
 
-    subgraph etw ["agent-etw"]
-        etw_files["session.rs<br/>mapping.rs<br/>tdh.rs"]
+    subgraph ETW["agent-etw — ETW Capture & Parsing"]
+        session["session.rs — StartTraceW, EnableTraceEx2, ProcessTrace"]
+        mapping["mapping.rs — Raw event → NormalizedEvent"]
+        tdh["tdh.rs — TDH property parsing, BOM-aware UTF-16 decode"]
+        semantic["semantic.rs — Provider-agnostic field classifier"]
+        ntstatus["ntstatus.rs — 500+ NTSTATUS/HRESULT/DNS error codes"]
+        event_desc["event_descriptions.rs — Provider/event_id → human-readable names"]
+        discovery["discovery.rs — Provider auto-detection"]
+        provider_f["provider_fields.rs + provider_registry.rs"]
     end
 
-    subgraph core ["agent-core"]
-        core_files["models.rs<br/>config.rs<br/>pipeline.rs<br/>tokenization.rs<br/>db.rs<br/>crypto.rs<br/>cms.rs<br/>reservoir.rs"]
+    subgraph Core["agent-core — Normalization & Baselining"]
+        models["models.rs — NormalizedEvent (200+ fields, 15 structs)"]
+        normalization["normalization.rs — SID/IP/path/guid normalization"]
+        tokenization["tokenization.rs — Deterministic stable/payload token hashing"]
+        pipeline["pipeline.rs — BaseliningPipeline, process cache, ES doc builder"]
+        sharded["sharded_pipeline.rs — 8-way hash-sharded ingest"]
+        cms["cms.rs — Count-Min Sketch"]
+        reservoir["reservoir.rs — Exemplar reservoir sampling"]
+        db["db.rs — SQLite WAL, AES-256-GCM encrypted blobs"]
+        crypto["crypto.rs — HKDF-SHA256 key derivation"]
+        process_f["process_forensics.rs — PEB command-line reader"]
+        terms["terms.rs — Search term extraction"]
     end
 
-    subgraph exporter ["agent-exporter"]
-        exp_files["shipper.rs<br/>(ES bulk API)<br/>outbox polling<br/>retry+deadletter"]
+    subgraph Export["agent-exporter — Elasticsearch Export"]
+        bulk["bulk.rs — ES _bulk API, gzip, retry, mapping conflict detection"]
+        worker["worker.rs — Outbox poller"]
     end
 
-    service --> etw
-    service --> core
-    service --> exporter
+    Binary --> ETW
+    Binary --> Core
+    Binary --> Export
+    ETW --> Core
+    Core --> Export
 ```
 
 ---
 
 ## Event Lifecycle
 
-### Phase 1: ETW Capture (`agent-etw`)
-
 ```mermaid
-flowchart TD
-    A["StartTraceW()"] --> B["EnableTraceEx2<br/>(47 providers)"]
-    B --> C["OpenTraceW()"]
-    C --> D["ProcessTrace()<br/>callback"]
-    D --> E["EVENT_RECORD"]
-    E --> F["TdhGetEventInformation()<br/>TdhGetProperty() × N"]
-    F --> G["HashMap&lt;String, Value&gt;"]
-    G --> H["mapping.rs::map_event()"]
-    H --> I["NormalizedEvent"]
-```
-
-**Key decisions:**
-- Real-time session (EVENT_RECORD, not log-file mode)
-- All 47 providers enabled in a single kernel session (where applicable) + user-mode sessions
-- TDH parses provider manifests to resolve property names and types
-- Semantic mapping uses event IDs and opcodes to classify events into types (`process_start`, `network_connect`, `dns_query`, etc.)
-
-### Phase 2: Normalization & Enrichment (`agent-core/sharded_pipeline.rs`)
-
-```mermaid
-flowchart TD
-    A[NormalizedEvent] --> B
-    subgraph pipeline ["7-Stage Pipeline"]
-        B["1. populate_process_cache_inner()<br/>Fill PID → image path, command line,<br/>modules, parent lineage, logon session"]
-        C["2. populate_logon_session_cache()<br/>On user_logon events:<br/>store logon_id → (type, guid)"]
-        D["3. compute_enrichments()<br/>Inter-event timing · Preceding token<br/>Tree depth · Ancestor chain hash<br/>Behavior tags (11) · Burst metrics<br/>First-seen binary · Process classification<br/>Network correlation · PE metadata<br/>Logon session · Field completeness"]
-        E["4. extract_terms()<br/>Tokenize search terms<br/>from key field values"]
-        F["5. build_tokens()<br/>Generate stable_hash (what)<br/>and payload_hash (exact)"]
-        G["6. update_enrichment_post_tokens()<br/>Store last tokens for next-event<br/>preceding reference · Update payload<br/>deviation scores"]
-        H["7. pick_shard() → shard.ingest()<br/>Route event to 1 of 8 shards<br/>by stable_hash[..8]"]
+flowchart LR
+    subgraph Phase1["Phase 1: ETW Capture"]
+        A["Windows Kernel"] -->|"EVENT_RECORD"| B["ProcessTrace callback"]
+        B --> C["TdhGetEventInformation()"]
+        C --> D["TdhGetProperty() × N"]
+        D --> E["bytes_to_json_value()"]
     end
-    B --> C --> D --> E --> F --> G --> H
-```
 
-**Why 8 shards:** Lock contention elimination. Each shard has its own CMS, reservoir, and process cache. Tokenization runs once; the stable hash deterministically routes to one shard.
-
-**Token determinism guarantee:** All new enrichment fields use `#[serde(skip_serializing_if = "Option::is_none")]` and are NOT added to token builders. The stable_hash and payload_hash are computed from a controlled subset of NormalizedEvent fields only.
-
-### Phase 3: Baselining (`agent-core/pipeline.rs`)
-
-```mermaid
-flowchart TD
-    A["shard.ingest_event_with_pretokenized<br/>(event, tokens)"] --> B
-    subgraph baselining ["Baselining Pipeline"]
-        B["db.upsert_stable_token(stable_hash)<br/>→ Returns: is_new_stable, decay_score,<br/>  rarity_band, times_seen"]
-        C["cms.observe(stable_hash)<br/>Count-Min Sketch increment<br/>for global frequency"]
-        D["Promoted exact counter<br/>(for payload variants)<br/>If observation count > threshold:<br/>exact counting"]
-        E["reservoir.offer(stable_hash, event)<br/>Reservoir sampling with<br/>richness scoring"]
-        F["If new_stable or boundary_cross or risk:<br/>Write exemplar document to outbox"]
-        G["If rarity ≤ export_threshold_score:<br/>Write event document to outbox"]
+    subgraph Phase2["Phase 2: Data Sanitization"]
+        E --> F{"All-zero bytes?"}
+        F -->|yes| NULL1["→ Null"]
+        F -->|no| G{"UTF-16 LE decode"}
+        G -->|"printable?"| H["→ String"]
+        G -->|"CJK/PUA >40%?"| I["UTF-16 BE fallback"]
+        I --> H
+        G -->|"garbage"| J{"printable ratio >50%?"}
+        J -->|yes| K["→ {hex, raw}"]
+        J -->|no| NULL2["→ Null"]
     end
-    B --> C --> D --> E --> F --> G
-```
 
-**Decay scoring:**
-```
-score = base_count × e^(-λ × days_since_last_seen)
-λ = ln(2) / decay_half_life_days
-```
+    subgraph Phase3["Phase 3: Semantic Classification"]
+        H --> L["classify_fields() — pattern match on TDH property names"]
+        K --> L
+        L --> M["infer_event_type() — provider-aware type inference"]
+        M --> N["38 event types recognized"]
+    end
 
-Rarity bands are computed from the decay score against `rare_threshold` and `common_threshold`.
+    subgraph Phase4["Phase 4: Enrichment"]
+        N --> O["PEB command-line backfill"]
+        O --> P["NTSTATUS → human-readable"]
+        P --> Q["DNS codes → names"]
+        Q --> R["Integrity → name resolution"]
+        R --> S["File attributes → decoded"]
+        S --> T["IP class + port service names"]
+        T --> U["Parent/grandparent cache backfill"]
+    end
 
-### Phase 4: Export (`agent-exporter`)
+    subgraph Phase5["Phase 5: Tokenization"]
+        U --> V["build_tokens() — 38 type-specific builders"]
+        V --> W["sanitize_token_value() — reject AAA=, hex pointers, numeric IDs"]
+        W --> X["stable_hash = SHA-256(behavior skeleton)"]
+        W --> Y["payload_hash = SHA-256(behavior + details)"]
+    end
 
-```mermaid
-flowchart TD
-    A["OutboxWorker<br/>(background thread)"] --> B
-    B["SELECT * FROM outbox<br/>WHERE sent = 0<br/>ORDER BY priority, created_at"]
-    B --> C["Batch assembly<br/>(up to bulk_max_docs<br/>or bulk_max_bytes)"]
-    C --> D["POST /_bulk<br/>(gzip compressed)"]
-    D --> E{Result}
-    E -->|"Success"| F["Mark sent"]
-    E -->|"Failure"| G["Increment attempt counter"]
-    G --> H{"attempts > max?"}
-    H -->|"Yes"| I["Dead letter"]
-    H -->|"No"| J["Reschedule with backoff"]
+    subgraph Phase6["Phase 6: Baselining"]
+        X --> Z["CMS frequency estimation"]
+        Y --> Z
+        Z --> AA["Decay-weighted rarity scoring"]
+        AA --> AB["Reservoir sampling for exemplars"]
+        AB --> AC["Write to outbox tables"]
+    end
+
+    subgraph Phase7["Phase 7: Export"]
+        AC --> AD["Bulk assembly (gzip)"]
+        AD --> AE["POST /_bulk"]
+        AE -->|success| AF["Mark sent"]
+        AE -->|"400 mapping conflict"| AG["Log field name + reason"]
+        AE -->|"429/5xx"| AH["Retry with backoff"]
+    end
 ```
 
 ---
 
-## Database Schema (`agent.db`)
+## Semantic Classification Pipeline
 
-| Table | Purpose |
-|---|---|
-| `stable_tokens` | Decay scores, rarity bands, observation counts per stable hash |
-| `payload_variants` | Exact counters for promoted payload hashes |
-| `exemplar_outbox` | Queued exemplar documents awaiting export |
-| `event_outbox` | Queued event documents awaiting export |
-| `pattern_outbox` | Queued pattern/aggregation documents |
-| `diagnostic_outbox` | Queued diagnostic documents |
-| `process_cache` | Recently seen process identities (PID → metadata) |
+```mermaid
+flowchart TD
+    EVENT["Raw ETW Event\n(provider + event_id + TDH properties)"]
 
-All sensitive columns (`api_key`, `sealed_blob`) are AES-256-GCM encrypted with per-purpose HKDF-derived keys.
+    EVENT --> GUESS["guess_event_type()\nProvider + event_id → type hint"]
+    GUESS --> CLASSIFY["classify_fields()\nMatch TDH property names against\n15 field-type pattern sets"]
+
+    CLASSIFY --> PROC["Process patterns\n(pid, image, cmdline, integrity, user)"]
+    CLASSIFY --> NET["Network patterns\n(src_ip, dst_ip, port, protocol, state)"]
+    CLASSIFY --> FILE["File patterns\n(path, name, operation, size, attributes)"]
+    CLASSIFY --> REG["Registry patterns\n(key_path, value_name, hive, operation)"]
+    CLASSIFY --> DNS["DNS patterns\n(query_name, query_type, response_code)"]
+    CLASSIFY --> WMI["WMI patterns\n(operation, namespace, query, consumer)"]
+    CLASSIFY --> IMG["Image Load patterns\n(module_path, checksum, timestamp, signature)"]
+    CLASSIFY --> HOST["Host patterns\n(os_version, build)"]
+
+    PROC --> VALIDATE["Field Validation Layer"]
+    NET --> VALIDATE
+    FILE --> VALIDATE
+    REG --> VALIDATE
+    DNS --> VALIDATE
+    WMI --> VALIDATE
+    IMG --> VALIDATE
+    HOST --> VALIDATE
+
+    VALIDATE --> V1{"looks_like_file_path()?\nRejects: pure numbers,\nhex pointers, GUIDs"}
+    VALIDATE --> V2{"is_bogus_tdh_string()?\nRejects: AAA=, all-null base64,\nsingle-char garbage"}
+    VALIDATE --> V3{"is_hex_pointer()?\nRejects: 0x... ≥10 hex digits"}
+    VALIDATE --> V4{"Printable ratio check?\nRejects: <50% printable,\ncontrol characters"}
+
+    V1 -->|yes| FIELDS["Clean NormalizedEvent Fields"]
+    V2 -->|no| FIELDS
+    V3 -->|no| FIELDS
+    V4 -->|yes| FIELDS
+
+    FIELDS --> INFER["infer_event_type(event, provider_hint)\n38 types: dns_query, registry, file,\nnetwork_connect, wmi, image_load,\nantimalware, com_classic, rpcss,\ncapi2, ntfs, win32k, schannel,\nappmodel, shell_core, system_trace,\nmemory_operation, power_state,\nboot_event, bits_client,\nfilter_manager, dotnet_runtime,\nwininet, winhttp, service,\nsmb_client, vbscript,\ntask_scheduler, applocker,\ndefender*, threat_intelligence,\nprocess_forensic, thread_operation,\nprocess_start/end/operation,\ngeneric"]
+
+    FIELDS --> DESC["Description Enrichment\nevent_name = get_event_name()\nseverity = get_severity_name()\ncategory = get_category_name()\ndescription_raw = formatted summary"]
+```
 
 ---
 
-## Config Defaults Philosophy
+## Data Sanitization — Garbage Detection
 
-The agent ships with **maximum data collection** defaults:
+```mermaid
+flowchart LR
+    subgraph Input["TDH Raw Bytes"]
+        A["byte buffer from\nTdhGetProperty()"]
+    end
 
-- **All 47 ETW providers enabled** — omit any in config to suppress
-- **Provider mode "all"** — auto-discovers every registered ETW provider
-- **All 4 export pipelines enabled** — exemplars, events, patterns, diagnostics
-- **Fixed index names** — `longhorizons-events`, `longhorizons-exemplars`, `longhorizons-patterns`, `longhorizons-diagnostics`
+    subgraph Checks["Sanitization Gates"]
+        A --> C1{"all bytes == 0?"}
+        C1 -->|yes| NULL["→ Null\n(empty UNICODE_STRING,\nnot-set fields)"]
 
-To reduce data volume, explicitly set providers to `false` and adjust `baselining.export_threshold_score` lower.
+        C1 -->|no| C2{"valid UTF-16LE string?"}
+        C2 -->|"yes, printable"| STR["→ String"]
+
+        C2 -->|"no, >40% CJK/PUA"| BE["Try UTF-16BE\nbyte-swap fallback"]
+        BE --> STR
+
+        C2 -->|"has letters but\ncontrol chars"| C3{"printable ratio\n>50%?"}
+        C3 -->|yes| WRAP["→ {hex, raw}\n(no ascii field\nif <70% printable)"]
+        C3 -->|no| NULL
+
+        C2 -->|"valid GUID"| GUID["→ GUID string"]
+        C2 -->|"u32/u64 number"| NUM["→ Number"]
+    end
+
+    subgraph Token["Token-Level Sanitization"]
+        STR --> T1{"sanitize_token_value()"}
+        WRAP --> T1
+        T1 -->|"AAA= / all-null base64"| REJECT1["Reject"]
+        T1 -->|"pure decimal >6 digits"| REJECT2["Reject"]
+        T1 -->|"0x... hex pointer"| REJECT3["Reject"]
+        T1 -->|"all-hex ≥16 chars"| REJECT4["Reject"]
+        T1 -->|"control chars / U+FFFD"| REJECT5["Reject"]
+        T1 -->|"valid text"| HASH["→ Token Hash"]
+    end
+```
+
+---
+
+## Token Construction
+
+```mermaid
+flowchart TD
+    EV["NormalizedEvent\n(clean fields only)"] --> MATCH{"event_type?"}
+
+    MATCH -->|"process_start"| PS["build_process_start_tokens()"]
+    MATCH -->|"process_end/operation"| PE["build_process_end_tokens()"]
+    MATCH -->|"network_connect"| NET["build_network_connect_tokens()"]
+    MATCH -->|"dns_query"| DNS["build_dns_query_tokens()"]
+    MATCH -->|"registry"| REG["build_registry_tokens()"]
+    MATCH -->|"image_load/unload"| IMG["build_image_load_tokens()"]
+    MATCH -->|"file"| FILE["build_file_tokens()"]
+    MATCH -->|"wmi"| WMI["build_wmi_tokens()"]
+    MATCH -->|"thread_*"| THR["build_thread_tokens()"]
+    MATCH -->|"antimalware"| AM["build_antimalware_tokens()"]
+    MATCH -->|"com_classic"| COM["build_com_classic_tokens()"]
+    MATCH -->|"rpcss/capi2/schannel"| RPC["build_rpcss/capi2/schannel_tokens()"]
+    MATCH -->|"win32k/ntfs/..."| SPEC["build_win32k/ntfs/etc_tokens()"]
+    MATCH -->|"other"| GEN["build_generic_tokens()"]
+
+    PS --> STABLE["proc_base_stable()\nimage_name, directory_class,\nsignature_bucket, hashes,\nparent image chain"]
+    PE --> STABLE
+    NET --> STABLE
+    DNS --> STABLE
+    REG --> STABLE
+    IMG --> STABLE
+    FILE --> STABLE
+    WMI --> STABLE
+    THR --> STABLE
+    AM --> STABLE
+    COM --> STABLE
+    RPC --> STABLE
+    SPEC --> STABLE
+    GEN --> STABLE
+
+    STABLE --> HASH1["SHA-256 → stable_hash\n'What behavior happened?'"]
+    STABLE --> PAYLOAD["+ variable fields\n(command_line, specific IPs,\nvalues, SID, timestamps)"]
+    PAYLOAD --> HASH2["SHA-256 → payload_hash\n'What were the exact details?'"]
+
+    HASH1 --> TOKEN["TokenPair { stable_hash, payload_hash,\nstable_canonical_json, payload_canonical_json }"]
+    HASH2 --> TOKEN
+```
+
+---
+
+## Database Schema
+
+```mermaid
+erDiagram
+    STABLE_TOKENS {
+        blob stable_hash PK "32-byte SHA-256"
+        text event_type "process_start, dns_query, etc."
+        text provider "ETW provider name"
+        int event_id
+        int total_count "Total observations"
+        real decay_score "Decay-weighted frequency"
+        text rarity_band "Rare, Uncommon, Common"
+        blob stable_canonical "Deterministic JSON"
+        blob provider_props "Provider-specific metadata"
+        int first_seen_unix
+        int last_seen_unix
+    }
+
+    PAYLOAD_VARIANTS {
+        blob payload_hash PK "32-byte SHA-256"
+        blob stable_hash FK "Links to STABLE_TOKENS"
+        blob payload_canonical "Variable-detail JSON"
+        int exact_count "Exact observation count"
+        real decay_score
+        int promoted_at_unix
+    }
+
+    OUTBOX {
+        int id PK
+        int priority "0=exemplar, 1=pattern, 2=event, 3=diagnostic"
+        text dedup_key "Unique per document"
+        blob document "JSON document bytes"
+        int created_at_unix
+        int sent "0=pending, 1=sent"
+        int attempts "Retry count"
+    }
+
+    LOGWELL {
+        int id PK
+        text level "error, warn, info"
+        text component "export, pipeline, etw, agent"
+        text message
+        text details
+        int created_at_unix
+    }
+
+    EXPORT_STATE {
+        blob stable_hash PK
+        int last_exemplar_unix
+        blob last_exemplar_payload
+        int last_pattern_unix
+        text pattern_rarity_band
+    }
+
+    STABLE_TOKENS ||--o{ PAYLOAD_VARIANTS : "has variants"
+    STABLE_TOKENS ||--o| EXPORT_STATE : "tracks export"
+```
 
 ---
 
 ## Concurrency Model
 
 ```mermaid
-flowchart LR
-    subgraph main ["Main Thread"]
-        A["Agent::run()"]
-        A1["ETW session start"]
-        A2["Exporter worker (tokio)"]
-        A3["Config reload watcher"]
-        A4["Health HTTP server"]
+flowchart TB
+    subgraph MainThread["Main Thread"]
+        SVC["Windows Service / CLI run"]
+        ETW["ETW Session Start"]
+        EXP["Exporter Worker (tokio)"]
+        CFG["Config Reload Watcher"]
+        HTTP["Health HTTP Server :8080"]
     end
 
-    subgraph callback ["ETW Callback Thread"]
-        B["ProcessTrace() callback"]
-        B1["TDH parse"]
-        B2["map_event()"]
-        B3["sender.send(event)"]
+    subgraph Callback["ETW Callback Thread (high frequency)"]
+        CB["ProcessTrace callback"]
+        TDH["TDH parse + sanitize"]
+        MAP["map_event() → NormalizedEvent"]
+        SEND["sender.send(event)"]
     end
 
-    subgraph pipeline ["ShardedPipeline"]
-        C["ingest_event()"]
-        C1["lock(shared_process_cache)"]
-        C2["lock(shared_enrichment)<br/>← parking_lot::Mutex"]
-        C3["build_tokens()"]
-        C4["pick_shard(hash)"]
-        C5["lock(shards[idx])<br/>← Mutex per shard"]
-        D["BaseliningPipeline::ingest()"]
+    subgraph Pipeline["Pipeline Thread"]
+        RECV["receiver.recv()"]
+        ENRICH["compute_enrichments()"]
+        TOK["build_tokens()"]
+        SHARD["pick_shard(hash[..8])"]
     end
 
-    B3 --> C
-    C --> C1 --> C2 --> C3 --> C4 --> C5 --> D
+    subgraph Shards["8 Baselining Shards (independent locks)"]
+        S0["Shard 0: CMS + Reservoir + DB"]
+        S1["Shard 1: CMS + Reservoir + DB"]
+        S2["Shard 2: CMS + Reservoir + DB"]
+        S3["Shard 3: CMS + Reservoir + DB"]
+        S4["Shard 4: CMS + Reservoir + DB"]
+        S5["Shard 5: CMS + Reservoir + DB"]
+        S6["Shard 6: CMS + Reservoir + DB"]
+        S7["Shard 7: CMS + Reservoir + DB"]
+    end
+
+    CB --> TDH --> MAP --> SEND
+    SEND --> RECV --> ENRICH --> TOK --> SHARD
+    SHARD --> S0
+    SHARD --> S1
+    SHARD --> S2
+    SHARD --> S3
+    SHARD --> S4
+    SHARD --> S5
+    SHARD --> S6
+    SHARD --> S7
 ```
 
-**Key design decisions:**
+**Key decisions:**
 - `parking_lot::Mutex` everywhere — no async locks in the hot path
 - 8 shards → 8 independent locks → minimal contention
 - Shared caches (process identity, enrichment state) are locked briefly for read/write then released
-- Database connection pool not needed — SQLite WAL mode handles concurrent readers + single writer
+- SQLite WAL mode handles concurrent readers + single writer
 
 ---
 
@@ -186,19 +366,39 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A["Machine Boot"] --> B["Generate master_key<br/>(256-bit random)"]
-    B --> C["DPAPI::Protect<br/>(LocalMachine, master_key)"]
-    C --> D["Write to state_dir/<br/>master_key.bin"]
-    D --> E["Derive purpose keys:"]
-    E --> F1["HKDF-SHA256(master_key,<br/>salt='outbox', info='agent.db')<br/>→ outbox_key"]
-    E --> F2["HKDF-SHA256(master_key,<br/>salt='patterns', info='agent.db')<br/>→ patterns_key"]
-    E --> F3["..."]
-    F1 --> G["Encrypt sensitive fields<br/>before DB write:"]
-    F2 --> G
-    F3 --> G
-    G --> H["AES-256-GCM(purpose_key, nonce, plaintext)<br/>→ (ciphertext, tag)"]
+    BOOT["Machine Boot / First Run"] --> GEN["Generate master_key\n(256-bit random)"]
+    GEN --> DPAPI["DPAPI::Protect(LocalMachine, master_key)"]
+    DPAPI --> DISK["Write to state_dir/master_key.bin"]
+
+    DISK --> DERIVE["On restart: DPAPI::Unprotect → master_key"]
+    DERIVE --> HKDF["HKDF-SHA256 derive purpose keys:"]
+    HKDF --> K1["outbox_key = HKDF(master, 'outbox', 'agent.db')"]
+    HKDF --> K2["patterns_key = HKDF(master, 'patterns', 'agent.db')"]
+    HKDF --> K3["events_key = HKDF(master, 'events', 'agent.db')"]
+
+    K1 --> ENC["AES-256-GCM encrypt\nsensitive DB fields before write"]
+    K2 --> ENC
+    K3 --> ENC
 ```
 
-On subsequent starts, the master key is decrypted from DPAPI and purpose keys are re-derived.
+---
 
-**TLS pinning** (optional): per-endpoint `tls_pins_sha256` list validates server certificate fingerprints before any data is sent.
+## Config Defaults
+
+The agent ships with **maximum data collection** defaults:
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| Provider mode | `all` | Auto-discovers every registered ETW provider |
+| Semantic mode | `true` | Provider-agnostic field classification |
+| Allow raw fields | `true` | Include raw TDH properties in ES documents |
+| Gzip | `true` | Compress _bulk requests |
+| Decay half-life | 30 days | Recency weighting for rarity scoring |
+| Reservoir size | 100 per stable | Exemplar samples retained |
+| Shard count | 8 | Independent baselining pipelines |
+| Process cache size | 2,000 | PID → identity lookups |
+| Promoted payload cache | 100,000 | Exact counting threshold |
+
+---
+
+*Document updated 2026-05-29 — Reflects v0.1.0 architecture with data quality overhaul*

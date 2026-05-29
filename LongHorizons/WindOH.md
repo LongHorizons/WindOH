@@ -39,39 +39,33 @@ Every token in the system gets enriched once by the LLM, cached in MongoDB, and 
 
 ## 2. System Architecture
 
-```mermaid
-flowchart TB
-    subgraph external ["External Inputs"]
-        ES["Elasticsearch<br/>(LongHorizons)<br/>events · exemplars · patterns"]
-        LLM["Local LLM<br/>192.168.0.133:31337<br/>enrichment"]
-        SearXNG["SearXNG<br/>metasearch<br/>IOC lookup"]
-        ART["Atomic Red Team<br/>(PowerShell)<br/>execution"]
-    end
-
-    subgraph windoh ["WindOH (Next.js)"]
-        subgraph services ["Core Services"]
-            Enrich["Enrichment<br/>Pipeline"]
-            Markov["Markov<br/>Engine"]
-            ARTMap["Atomic<br/>Mapper"]
-        end
-        subgraph mongo ["MongoDB"]
-            T["tokens"]
-            S["sequences"]
-            C["coverage"]
-            TI["threat intel"]
-            SC["search cache"]
-        end
-    end
-
-    ES -->|"events"| Enrich
-    Enrich --> T
-    Enrich --> LLM
-    LLM -->|"enrichment"| T
-    Markov --> S
-    ARTMap --> C
-    ART -->|"execution"| ARTMap
-    SearXNG -->|"IOC lookup"| TI
-    SearXNG --> SC
+```
+                     ┌──────────────────────────────────────────────┐
+                     │                 WindOH (Next.js)              │
+                     │                                              │
+   Elasticsearch     │  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
+   (LongHorizons)    │  │ Enrich-  │  │ Markov   │  │ Atomic    │  │
+   ──────────────────▶│  │ ment     │  │ Engine   │  │ Mapper    │  │
+   events            │  │ Pipeline │  │          │  │           │  │
+   exemplars         │  └────┬─────┘  └────┬─────┘  └─────┬─────┘  │
+   patterns          │       │             │              │         │
+                     │       ▼             ▼              ▼         │
+   Local LLM         │  ┌──────────────────────────────────────┐   │
+   192.168.0.133     │  │            MongoDB                    │   │
+   :31337            │  │  ┌────────┐ ┌────────┐ ┌─────────┐  │   │
+   ◀─────────────────│──│ tokens  │ │sequences│ │coverage │  │   │
+   enrichment        │  │ └────────┘ └────────┘ └─────────┘  │   │
+                     │  │  ┌────────┐ ┌────────┐              │   │
+   SearXNG           │  │  │threat  │ │search  │              │   │
+   metasearch        │  │  │intel   │ │cache   │              │   │
+   ◀─────────────────│──│ └────────┘ └────────┘              │   │
+   IOC lookup        │  └──────────────────────────────────────┘   │
+                     │                                              │
+   Atomic Red Team   │  ┌──────────┐  ┌──────────┐                 │
+   (PowerShell)      │  │ Test     │  │ Coverage │                 │
+   ◀─────────────────│──│ Runner   │  │ Reporter │                 │
+   execution         │  └──────────┘  └──────────┘                 │
+                     └──────────────────────────────────────────────┘
 ```
 
 ### 2.1 Data Flow

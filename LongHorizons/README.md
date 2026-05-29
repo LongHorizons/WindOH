@@ -2,148 +2,156 @@
 
 **Real-Time Windows Endpoint Visibility — Built for Security Operations, Threat Hunting, and AI-Driven Analytics**
 
-A production-grade Windows telemetry agent that captures real-time ETW events from 47 kernel and user-mode providers, normalizes and tokenizes them into cryptographically stable behavioral identifiers, enriches with cross-event relational context, scores rarity via decay-weighted baselines, and exports to Elasticsearch for downstream security operations, threat hunting, and LLM dataset generation.
+A production-grade Windows telemetry agent that captures real-time ETW events from 200+ kernel and user-mode providers, normalizes and tokenizes them into cryptographically stable behavioral identifiers, enriches with cross-event relational context, scores rarity via decay-weighted baselines, and exports to Elasticsearch for downstream security operations, threat hunting, and LLM dataset generation.
 
 ---
 
-## Business Value
-
-The LongHorizons Telemetry Agent transforms raw Windows event data into a queryable, deduplicated, and pre-scored behavioral dataset. It solves three problems that every security team faces at scale:
-
-| Problem | Traditional Approach | LongHorizons Solution |
-|---|---|---|
-| **Storage cost** | 50–200 GB/day per 1,000 endpoints of raw log data | 90–99% reduction via cryptographic deduplication (same behavior = same hash = stored once) |
-| **Analyst fatigue** | Every event looks unique; analysts re-triage the same benign behaviors daily | Pre-scored rarity bands (Rare/Uncommon/Common) let analysts focus only on novel signals |
-| **Detection latency** | "Is this new?" requires hours of manual hunting through historical data | Instant: deterministic stable hash lookup answers "have we ever seen this behavior before?" in microseconds |
-
-**For a 1,000-endpoint fleet**: 90–99% reduction in stored event volume, analysts spending time on genuinely novel signals, and a behavioral dataset immediately queryable for threat hunting and LLM training without weeks of preprocessing.
-
-**For AI/LLM teams**: The agent produces pre-enriched event documents with inter-event timing, process lineage, behavioral tags, payload deviation scoring, burst detection, and cross-process correlation — eliminating the data engineering bottleneck that typically consumes 60–80% of ML project timelines.
-
----
-
-## What It Does
+## Data Flow Overview
 
 ```mermaid
 flowchart LR
-    subgraph etw ["Windows ETW"]
-        A["47 Providers<br/>Kernel+User<br/>Real-time"]
+    subgraph Windows["Windows Kernel + User-Mode"]
+        KP["Kernel Providers\n(Process, Thread, Network,\nFile, Registry, Memory)"]
+        UP["User-Mode Providers\n(DNS, WMI, Defender, PowerShell,\nSchannel, RPC, WinHTTP, ...)"]
     end
-    subgraph agent ["SQLite"]
-        B["Normalize → Enrich →<br/>Tokenize → Baseline →<br/>Reservoir → Outbox"]
-    end
-    subgraph es ["Elasticsearch"]
-        C["longhorizons-events<br/>longhorizons-exemplars<br/>longhorizons-patterns<br/>longhorizons-diagnostics"]
-    end
-    A --> B --> C
-```
 
-- **Collects** from 47 ETW providers (kernel process/thread/network/file/registry, DNS, PowerShell, Defender, Schannel, RPC, WMI, Hyper-V, storage, and more)
-- **Tokenizes** each event into a `stable_hash` (what happened) and `payload_hash` (exact details) — deterministic across hosts
-- **Enriches** with: inter-event timing, process lineage/genealogy, PE metadata, logon session correlation, behavioral tags, burst detection, cross-process network correlation
-- **Baselines** rarity with exponential decay scoring (Count-Min Sketch + exact promotion)
-- **Exports** via durable outbox with retry, dead-letter, gzip compression, and deduplication
+    subgraph Agent["LongHorizons Agent"]
+        ETW["ETW Session\nReal-time trace"]
+        SAN["Sanitization\nBOM-aware UTF-16\ngarbage detection"]
+        SEM["Semantic Classification\n38 event types\nprovider-agnostic"]
+        ENRICH["Enrichment\nPEB cmdline, NTSTATUS,\nDNS codes, integrity,\nparent backfill"]
+        TOK["Tokenization\nstable_hash + payload_hash\nSHA-256 deterministic"]
+        BASE["Baselining\nCMS frequency, decay scoring,\nreservoir sampling"]
+        OUT["Outbox\nPriority queue\ndedup + retry"]
+    end
+
+    subgraph ES["Elasticsearch"]
+        EVENTS["telemetry-events-*"]
+        EXEMPLARS["telemetry-exemplars-*"]
+        PATTERNS["telemetry-patterns"]
+        DIAG["telemetry-diagnostics"]
+    end
+
+    KP --> ETW
+    UP --> ETW
+    ETW --> SAN
+    SAN --> SEM
+    SEM --> ENRICH
+    ENRICH --> TOK
+    TOK --> BASE
+    BASE --> OUT
+    OUT --> EVENTS
+    OUT --> EXEMPLARS
+    OUT --> PATTERNS
+    OUT --> DIAG
+```
 
 ---
 
-## Why This Approach — The Problem With Raw Telemetry
+## Tokenization: How Deduplication Works
 
-Organizations running Windows fleet telemetry face three compounding problems:
+```mermaid
+flowchart TD
+    subgraph Events["Three Events — Same Behavior, Different Details"]
+        E1["Event 1\ncmd.exe → whoami.exe\nPID 1234, 9:05 AM"]
+        E2["Event 2\ncmd.exe → whoami.exe\nPID 5678, 10:22 AM"]
+        E3["Event 3\ncmd.exe → net.exe user\nPID 1234, 9:06 AM"]
+    end
 
-### The Storage Problem
+    subgraph Tokens["Cryptographic Hashing"]
+        E1 --> S1["stable_hash: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
+        E1 --> P1["payload_hash: d4e5f6...\n'whoami.exe at 9:05 AM'\n(unique)"]
 
-A 1,000-endpoint fleet running traditional log forwarding generates 50–200 GB/day of raw Windows Event Log data. Most of it is identical noise — the same legitimate process events, the same DNS lookups, the same registry reads, repeated millions of times. Storing that in a SIEM or data lake costs money, and most teams solve it with aggressive retention windows that destroy the very evidence they'd need during an investigation.
+        E2 --> S2["stable_hash: a1b2c3...\n(same — identical behavior)"]
+        E2 --> P2["payload_hash: g7h8i9...\n'whoami.exe at 10:22 AM'\n(unique)"]
 
-### The Analyst Fatigue Problem
+        E3 --> S3["stable_hash: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
+        E3 --> P3["payload_hash: m3n4o5...\n'net.exe user at 9:06 AM'\n(unique)"]
+    end
 
-When every event looks like a unique snowflake, SOC analysts drown in alerts that are really just the same benign behavior wearing a different timestamp. A `cmd.exe` spawning `whoami.exe` at 9:05 AM looks like a new threat — but it's been happening every morning for 6 months. Without baselining, the analyst has no way to know that without manually hunting through historical data. Fatigue leads to missed signals.
-
-### The Detection Gap
-
-Signature-based detection (SIEM rules, IOCs, YARA) catches what you already know about. Behavioral detection requires understanding what's normal — and what's not. Raw telemetry pipelines don't compute normality; they just shovel data. The gap between "something happened" and "something unusual happened" is the most expensive distance in security operations.
-
-### How Tokenization + Baselining Solves This
-
-```
-                Raw events                      Tokens + Baseline
-              ─────────────                   ──────────────────
-Volume:        100,000 / hour                    1,000 new / hour
-                                              (99% deduplicated —
-                                               same event, same hash,
-                                               only the count changes)
-
-Storage:       ~200 GB / day                     ~2 GB / day
-                                              (event stored once;
-                                               subsequent occurrences
-                                               increment a counter)
-
-Analyst view:  "cmd.exe started whoami.exe"      "cmd.exe → whoami.exe
-               (for the 400th time today)         was seen 23,847 times
-                                                  across 847 hosts this
-                                                  month. Rarity: COMMON.
-                                                  Freq: 0.0% anomalous."
-
-Detection:     "Is this new?"                   "This stable token has
-               (can't answer without             never been seen before
-                weeks of historical              on any host — RARE,
-                search)                          immediate exemplar
-                                                  exported."
+    subgraph Storage["Storage Impact"]
+        S1 --> STORE["Stable token stored ONCE\nSubsequent occurrences: counter++"]
+        P1 --> STORE2["Payload token stored once per variant\nRare payloads → immediate exemplar export"]
+    end
 ```
 
-**Stable tokens** (SHA-256 of the _behavioral skeleton_ of an event — process lineage + operation type + normalized fields) collapse identical events into the same hash. One hash = one behavior. The first time a behavior appears, the full event is exported as an exemplar. After that, only the count increments and pattern statistics update.
+**Stable tokens** (SHA-256 of the behavioral skeleton — process lineage + operation type + normalized fields) collapse identical behaviors into the same hash. **Payload tokens** add the variable details (command lines, IPs, specific values). Same hash = same behavior = stored once.
 
-**Payload tokens** track _what changed_ within a behavior — different command lines, different IPs, different registry keys. Rare payloads within common behaviors surface immediately.
+---
 
-**Decay-weighted baselining** means frequency isn't just a count — it's recency-aware. A behavior that happened 10,000 times last year but zero times this month has a lower score than one that happened 100 times this week. The baseline continuously self-calibrates.
+## Data Quality Guarantees
 
-### Idempotency Across the Fleet: Same Behavior, Same Token, Everywhere
+```mermaid
+flowchart TD
+    subgraph Problems["Problems Detected & Fixed"]
+        P1["AAA= base64 artifacts\n(all-null TDH buffers)"]
+        P2["CJK mojibake\n(UTF-16 BE/LE confusion)"]
+        P3["Numeric IDs as paths\n('279175954510' ≠ cmd.exe)"]
+        P4["Hex pointers as names\n('0xffffe084d6d5bc70')"]
+        P5["NTSTATUS raw numbers\n('3221225524' unreadable)"]
+        P6["Garbled binary in text\n(control chars, U+FFFD)"]
+        P7["Empty fields as objects\n({hex:'0000', raw:'0'})"]
+        P8["Null GUIDs\n(GUID:00000000-...)"]
+        P9["100% null descriptions\n(semantic_mode bug)"]
+        P10["ES type conflicts\n(string vs number vs object)"]
+        P11["Tokens contaminated\n(garbage in hashes)"]
+    end
 
-The tokenization design solves a problem most SIEM pipelines don't even acknowledge: **event identity is not behavioral identity**. A process start event on Host A at 9:05 AM and the same logical operation on Host B at 3:22 PM are one behavior — but raw telemetry pipelines store them as two unrelated rows.
+    subgraph Fixes["Fixes Applied"]
+        F1["All-zero bytes → Null\n(in bytes_to_json_value)"]
+        F2["BOM detection + BE fallback\n(wide_ptr_to_string_bounded)"]
+        F3["looks_like_file_path()\n(rejects pure numbers, hex)"]
+        F4["is_hex_pointer()\n(rejects kernel addresses)"]
+        F5["ntstatus.rs: 500+ codes\n(STATUS_OBJECT_NAME_NOT_FOUND)"]
+        F6["is_printable_text()\n(>60% printable, no controls)"]
+        F7["extract_string filter\n(skip all-zero hex + raw '0')"]
+        F8["All-zero hex → Null\n(in fallback encoder)"]
+        F9["Semantic path enrichment\n(event_name, severity, category)"]
+        F10["Stringify all pp values\n(consistent ES types)"]
+        F11["sanitize_token_value()\n(rejects garbage pre-hash)"]
+    end
 
-LongHorizons collapses them into one token. Here's how.
-
-**Volatile field stripping.** Before hashing, every field that could differ between two instances of the same behavior is removed:
-
-| Stripped (volatile) | Retained (behavioral skeleton) |
-|---|---|
-| Process ID, Thread ID, Handle | Event type, Operation, Category |
-| Timestamp, boot time | Process image path, Parent image path |
-| Command-line arguments | Ancestor chain hash (SHA-256 of image lineage) |
-| Source/destination IP addresses | Tree depth (parent → grandparent distance) |
-| File paths, registry key paths | Signing status (signed/unsigned/Microsoft) |
-| DNS query strings | Integrity level, Logon type |
-| Session ID, logon GUID | Behavioral tags (11 boolean heuristics) |
-
-The hash is computed over the behavioral skeleton — the *shape* of the activity, not the specific data that flowed through it. Two instances of `cmd.exe → whoami.exe` running as LocalSystem from `C:\Windows\System32` with the same ancestor chain produce the same `stable_hash` regardless of which host they ran on, which user triggered them, or when they occurred.
-
-**What this enables:**
-
-- **One enrichment, fleet-wide.** When WindOH enriches a `stable_hash` — generating a description, MITRE mappings, risk assessment, and investigation steps — that enrichment applies to every host that ever exhibits the behavior. The LLM runs once per behavior, not once per host or once per occurrence. For a 1,000-endpoint fleet, that's the difference between 1,000 LLM calls for the same behavior and exactly 1.
-
-- **Cross-host comparison as a hash join.** "Show me every host that executed this behavioral pattern" is a single indexed lookup on `stable_hash`. No multi-field text queries across process names, command lines, and timestamps. No correlation rules to maintain. One hash, one query, instant results.
-
-- **Rarity scored globally, not per host.** A behavior that appears once on one host is rare. A behavior that appears 50,000 times across 800 hosts is common. The Count-Min Sketch and decay scoring operate on the global frequency — not the per-host frequency. An attacker can't hide by spreading activity across many endpoints; the system sees the aggregate.
-
-- **Deterministic and reproducible.** There is no training period, no model to drift, no threshold to tune. A `stable_hash` computed at 9:05 AM on Host A matches the same behavior at 3:22 PM on Host B — always, by construction. This is court-admissible: the hash is a mathematical identity, not a probabilistic inference.
-
-**The deduplication ripple effect:**
-
-```
-                      Without idempotency          With idempotency
-                      ──────────────────          ─────────────────
-Storage:              Every event stored N times   Stored once; counter increments
-Analyst triage:       Same behavior reviewed       Enrich once; cached for all
-                      400 times across hosts       future occurrences
-LLM enrichment:       Re-enriched per occurrence   Enriched once; cached permanently
-Detection engineering: Rules written per pattern   One detection rule covers all
-                      variant                      occurrences of the hash
-Cross-host hunting:   Manual correlation across    Hash join across fleet
-                      hostnames, PIDs, timestamps  in a single query
+    P1 --> F1
+    P2 --> F2
+    P3 --> F3
+    P4 --> F4
+    P5 --> F5
+    P6 --> F6
+    P7 --> F7
+    P8 --> F8
+    P9 --> F9
+    P10 --> F10
+    P11 --> F11
 ```
 
-The result is not just storage reduction — it's that every downstream system (enrichment, detection, investigation, hunting, compliance) starts from the same deduplicated, pre-scored signal instead of redoing the deduplication work independently.
+---
 
-### The Bottom Line
+## Enrichment Features (in exported ES documents)
+
+| Category | Fields | Description |
+|----------|--------|-------------|
+| **Event Identity** | `event_name`, `severity`, `category`, `description_raw` | Human-readable event descriptions resolved from provider + event_id |
+| **Process Context** | `command_line_original`, `command_line_normalized`, `integrity_level`, `signature_bucket`, `user`, `user_domain` | Full process identity with PEB command-line fallback |
+| **Parent Chain** | `parent.image_name`, `parent.image_path`, `grandparent_image_name`, `grandparent_image_path` | Process lineage backfilled from cache |
+| **Image Load** | `module_path`, `image_checksum`, `time_date_stamp`, `section_count`, `signature_bucket`, `debug_path` | DLL/EXE load metadata |
+| **Network** | `src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol` (normalized), `source_port_name`, `destination_port_name`, `ip_class` | Full network context with service names |
+| **DNS** | `query_name`, `query_type` (translated), `response_code` (translated), `query_status` (NTSTATUS decoded) | Human-readable DNS telemetry |
+| **Registry** | `key_path`, `value_name`, `value_type_name`, `details`, `details_raw`, `hive`, `ntstatus` | Registry operations with decoded types |
+| **File System** | `path`, `name`, `extension`, `operation`, `attributes` (decoded), `file_attributes_decoded` | File operations with attribute decoding |
+| **WMI** | `operation`, `namespace`, `query`, `consumer`, `status` (translated) | WMI activity monitoring |
+| **Inter-event** | `delta_ms_since_prev`, `delta_ms_since_process_start`, `burst_count_5s`, `burst_count_60s` | Timing and burst context |
+| **Behavioral** | `behavior_tags`, `process_classification`, `tree_depth`, `ancestor_chain_hash` | Heuristic tags + lineage |
+| **Tokenization** | `stable_hex`, `payload_hex`, `stable_canonical`, `payload_canonical` | Deterministic behavioral hashes |
+| **Provider** | `provider_properties` | All TDH properties, stringified for ES type safety |
+
+
+---
+
+## Full-Scope Value Proposition
+
+### Business
+
+The agent transforms Windows telemetry from a cost center into an intelligence asset:
 
 | Metric | Raw Log Pipeline | LongHorizons Pipeline |
 |---|---|---|
@@ -154,291 +162,179 @@ The result is not just storage reduction — it's that every downstream system (
 | **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic stable hash |
 | **Investigation surface** | Every event | Rare + uncommon events only |
 | **LLM enrichment ready** | No (no relational context) | Yes (timing, lineage, burst, behavior tags precomputed) |
+| **Data cleanliness** | Raw, unvalidated | Sanitized: no AAA=, no mojibake, no hex pointers, all codes human-readable |
 
-For a 1,000-endpoint fleet, this means **90-99% reduction in stored event volume**, analysts spending time on genuinely novel signals instead of re-triaging the same behaviors, and a behavioral dataset that's immediately queryable for threat hunting and LLM training without weeks of preprocessing.
+**For a 1,000-endpoint fleet**: 90–99% storage reduction, analyst time focused on novel signals, pre-built behavioral dataset eliminating 60–80% of ML data engineering.
 
-## Use Cases
+### Research
 
-**Security Operations Center (SOC)**: Surface genuinely novel process executions, network connections, and registry modifications. The agent's rarity scoring means Tier 1 analysts see only uncommon and rare events — not the 400th instance of `svchost.exe` starting a DNS lookup.
+The agent produces a **deterministic, deduplicated behavioral corpus** — every Windows kernel and user-mode operation from 200+ ETW providers, cryptographically indexed by behavioral identity:
 
-**Threat Hunting**: Query across all endpoints by stable behavioral hash. "Show me every host that executed a process with this exact lineage and operation pattern, regardless of process name or PID" — a single Elasticsearch query.
+- **Reproducible research**: `stable_hash` is deterministic — two researchers observing the same behavior on different machines get the same hash. Results are independently verifiable.
+- **Cross-system behavioral phylogenetics**: Track how behaviors evolve across Windows versions, patch levels, and configurations. The same hash means the same behavior, regardless of hostname, PID, or timestamp.
+- **Kernel operation taxonomy**: Every NTFS file operation, every registry key touch, every network connection, every process creation — classified, counted, and rarity-scored. Build a complete behavioral map of Windows.
+- **Longitudinal studies**: Decay-weighted baselining with 30-day half-life means frequency scores self-calibrate. "What behaviors became more common after the May 2026 patch?" — answerable in one query.
+- **Zero-preprocessing ML datasets**: Pre-enriched documents with inter-event timing, process lineage, behavioral tags, burst detection, payload deviation scoring. Drop directly into LLM fine-tuning, anomaly detection models, or graph neural networks.
 
-**Incident Response**: Reconstruct process trees with full command lines (captured from the PEB at event time, not from ETW payloads alone), inter-event timing deltas, and ancestor chain hashes for rapid lateral movement tracing.
+### Detection Engineering
 
-**Compliance & Audit**: Continuous, tamper-evident behavioral baseline with cryptographic integrity. Demonstrate that all process executions, network connections, and registry modifications are captured and scored in real time.
+Every detection use case benefits from pre-computed behavioral identity:
 
-**AI/ML Dataset Generation**: Pre-enriched, deduplicated event corpus with relational features already computed — behavioral tags, burst metrics, payload deviation scores, and cross-process correlation — ready for LLM fine-tuning, anomaly detection models, or security copilot training.
+```mermaid
+flowchart LR
+    subgraph Traditional["Traditional Detection"]
+        T1["Raw event stream"] --> T2["SIEM rules engine"]
+        T2 --> T3["Alert: cmd.exe spawned\nsomething (again)"]
+        T3 --> T4["Analyst triages\n400th identical alert today"]
+    end
 
-## Prerequisites
-
-| Requirement | Details |
-|---|---|
-| **OS** | Windows 10 / Windows Server 2019+ |
-| **Privileges** | Administrator or LocalSystem (required for ETW trace sessions) |
-| **Binary** | Single ~8 MB self-contained `.exe` — no runtime dependencies |
-| **Elasticsearch** | 7.x or 8.x with bulk API (optional — agent runs without it) |
-
-## Quick Start
-
-### 1. Get the binary
-
-Extract the pre-built agent from `release.zip` (~3.6 MB) or download from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA).
-
-### 2. Create directories
-
-```powershell
-mkdir C:\ProgramData\LongHorizonsAgent\state
-mkdir C:\ProgramData\LongHorizonsAgent\logs
+    subgraph LongHorizons["LongHorizons Detection"]
+        L1["Tokenized event stream"] --> L2["Rarity band lookup\n(stable hash → DB)"]
+        L2 -->|"RARE: never seen before"| L3["Immediate exemplar export\nFull event + lineage + timing"]
+        L2 -->|"UNCOMMON: seen <20 times"| L4["Flagged for review\nLow-frequency pattern"]
+        L2 -->|"COMMON: seen 23,847 times"| L5["Counter incremented\nNo alert, no storage"]
+    end
 ```
 
-### 3. Configure
+**Detection engineering workflows enabled:**
 
-Copy `config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml` and fill in:
-- `agent.id` — unique host identifier
-- `export.events.endpoint` — your Elasticsearch URL
-- `export.events.api_key` — your ES API key (or leave empty for no auth)
+| Capability | How |
+|------------|-----|
+| **Novel behavior detection** | `rarity_band: "Rare"` — instant alert on first-seen behavioral patterns |
+| **LOLBin hunting** | `behavior_tags: "unusual_parent"` — system host spawning shell, pre-tagged |
+| **Persistence discovery** | `behavior_tags: "persistence_key"` — Run/RunOnce/Winlogon registry writes flagged |
+| **C2 beaconing detection** | `burst_count_5s` + `dst_ip_class` — periodic outbound connections surfaced |
+| **DLL side-loading** | `behavior_tags: "dll_side_load"` — signed process loading DLL from user-writable dir |
+| **Process hollowing** | `process_start` + `command_line` mismatch — spawned vs. parent lineage anomalies |
+| **Lateral movement** | `network_connect` + `source_image` — cross-process network correlation |
+| **Token theft** | `logon_id` mismatch — process running under different logon session than parent |
+| **Obfuscated execution** | `command_line_analysis.obfuscation_score` ≥ 2 — base64, caret escaping, string splitting |
+| **Cross-host hunting** | `stable_hash` lookup across all hosts — "show me everywhere this behavior occurred" |
 
-### 4. Test run (foreground)
+### Understanding Windows — What the Kernel Tells You
 
-```powershell
-.\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
-```
-
-Watch for:
-```
-INFO  Agent starting...
-INFO  Database initialized at ...
-INFO  Pre-populated process cache with NNN entries
-INFO  ShardedPipeline initialized with 8 shards
-INFO  Events export enabled: true
-INFO  ETW session started
-INFO  NNN new records
-```
-
-### 5. Install as Windows service (recommended)
-
-The agent ships with PowerShell installer/uninstaller scripts:
-
-```powershell
-# From an Administrator PowerShell prompt:
-.\install.ps1
-
-# Or with explicit paths:
-.\install.ps1 -BinaryPath ".\agent.exe" -ConfigPath ".\config.toml"
-```
-
-The installer:
-- Creates the Windows service running as `LocalSystem` (required for ETW kernel tracing)
-- Sets automatic startup and failure recovery (restart after 60s, 3 retries)
-- Copies binary and config to `C:\ProgramData\LongHorizonsAgent\`
-- Starts the service and runs a health check
-
-To uninstall:
-
-```powershell
-.\uninstall.ps1           # Remove service, keep data
-.\uninstall.ps1 -RemoveData  # Remove service + all logs/state
-```
-
-### 6. Verify
-
-```powershell
-# Health check
-Invoke-RestMethod http://127.0.0.1:8080/health
-
-# Check ES indexes
-Invoke-RestMethod http://your-es:9200/_cat/indices/longhorizons-*
-```
-
-## Multi-Tier Baselining: Four Indexes, One Picture of Normal
-
-The agent doesn't just ship events — it ships a pre-computed baseline across four indexes, each serving a distinct purpose in answering "what's normal here?"
-
-### The Four Indexes as a Baselining Stack
+ETW is Windows' introspection API. Every kernel subsystem emits structured telemetry. The agent surfaces what the kernel is saying:
 
 ```mermaid
 flowchart TB
-    subgraph diag ["longhorizons-diagnostics"]
-        D["Is the pipeline healthy?<br/>Agent uptime, ETW restarts,<br/>dropped events, shard<br/>backpressure, disk free"]
+    subgraph Kernel["Windows Kernel Subsystems — What They Emit"]
+        KP["Kernel-Process\n→ Process create/exit, DLL loads,\n  handle operations, token elevation"]
+        KN["Kernel-Network\n→ TCP/UDP connect/disconnect,\n  port bindings, interface state"]
+        KF["Kernel-File + Ntfs\n→ File creates, reads, writes, deletes,\n  attribute changes, volume operations"]
+        KR["Kernel-Registry\n→ Key create/open/delete,\n  value set/query, hive operations"]
+        KT["Kernel-Thread\n→ Thread create/exit,\n  scheduling, context switches"]
+        KM["Kernel-Memory\n→ Page faults, working set changes,\n  memory allocations, section maps"]
     end
-    subgraph pat ["longhorizons-patterns"]
-        P["What's trending across the fleet?<br/>Aggregated frequency per behavior,<br/>cross-host prevalence, drop counts,<br/>rarity band transitions over time"]
+
+    subgraph UserMode["User-Mode Providers — Application Visibility"]
+        DNS["DNS-Client\n→ DNS queries, responses,\n  cache operations, server lists"]
+        WMI["WMI-Activity\n→ WMI queries, filter bindings,\n  consumer starts/stops"]
+        PS["PowerShell\n→ Script blocks, pipeline execution,\n  module loads, command invocation"]
+        DEF["Windows Defender\n→ Threat detections, actions taken,\n  scan starts/completions, sig updates"]
+        CI["Code Integrity\n→ Driver signing checks,\n  HVCI enforcement, policy violations"]
+        SCH["Schannel\n→ TLS handshakes, certificate validation,\n  cipher suite negotiation"]
+        RPC["RPCSS + COM\n→ RPC interface registrations,\n  COM class activations, proxy operations"]
+        CAPI["CAPI2\n→ Certificate operations,\n  crypto API calls, chain building"]
     end
-    subgraph exe ["longhorizons-exemplars"]
-        E["What does this behavior look like?<br/>One representative event per unique<br/>stable_hash, with full payload detail,<br/>reason for sampling, rarity at capture"]
-    end
-    subgraph evt ["longhorizons-events"]
-        V["What's happening right now?<br/>Every event with pre-computed rarity,<br/>decay score, behavioral tags, timing,<br/>lineage — the full enrichment payload"]
-    end
-    diag --> pat --> exe --> evt
+
+    Kernel --> AGENT["LongHorizons Agent\n200+ providers → 1 unified event stream"]
+    UserMode --> AGENT
+    AGENT --> INSIGHT["What You Learn\n→ Every process tree on the system\n→ Every network connection with service name\n→ Every DNS query with response codes\n→ Every registry persistence mechanism\n→ Every COM object activation\n→ Every TLS certificate validated\n→ Every PowerShell command executed\n→ Every file touch across all volumes\n→ Inter-event timing for every PID\n→ Burst patterns for beaconing detection\n→ Process lineage with 3-generation ancestry"]
 ```
 
-### What Each Index Tells You
+**Kernel debugging without a debugger**: Each event carries the kernel's own structured data — thread IDs, IRQL, processor numbers, NTSTATUS codes, allocation sizes, IRP function codes. No kernel debugger required. The agent decodes every NTSTATUS, every file attribute, every registry value type, every DNS response code into human-readable form.
 
-**`longhorizons-events` — The detailed record.** Every event, enriched and scored. This is the source of truth for investigation and hunting. Key baselining fields on every document:
+### Debugging Windows via ETW
 
-| Field | What it tells you |
-|---|---|
-| `rarity_band` | Rare / Uncommon / Common — pre-computed, no query needed |
-| `decay_score` | Recency-weighted frequency (0.0 to unbounded) with configurable half-life |
-| `behavior_tags` | Array of 11 boolean heuristics: `first_seen_binary`, `from_temp_dir`, `encoded_command`, `network_to_loopback`, etc. |
-| `risk_score` | Composite: `(1 - normalization_weight) + (burst_factor × 0.3) + (rarity_factor × 0.4)` |
-| `tokens.stable_hex` | The behavioral identity — join across hosts, indexes, and time ranges |
-| `tokens.payload_hex` | The variant identity — what changed within the same behavioral pattern |
+The agent captures data that traditionally required WinDbg + kernel debugger:
 
-**`longhorizons-exemplars` — The reference gallery.** When a behavior is seen for the first time, or when a payload is a significant deviation from prior observations, the full event (with command lines, IPs, file paths) is exported as an exemplar. This gives analysts a concrete instance of each behavior without storing every occurrence. Reservoir sampling with richness scoring ensures the most information-dense event is kept as the exemplar, not just the first one seen.
+| Debugging Task | Traditional Approach | ETW via LongHorizons |
+|----------------|---------------------|----------------------|
+| **Why did this process crash?** | Attach WinDbg, capture dump, analyze | `process_end` with `exit_code` + `process_state` + preceding events with inter-event timing |
+| **What DLLs loaded in this process?** | `lm` in WinDbg, `!dlls` in livekd | `image_load` events for every DLL, with checksums, timestamps, and signatures |
+| **What registry keys did this touch?** | `regmon` / Process Monitor | Every kernel registry operation with key path, value name, type, and status code |
+| **What network connections are active?** | `netstat -ano`, `!tcp` in WinDbg | Every TCP/UDP connect/disconnect with source/destination IPs, ports, and service names |
+| **Is this driver signed?** | `!lmi`, `sigcheck` | Code Integrity events with signature status, policy violations, and publisher info |
+| **What's the process lineage?** | `!peb`, `!token`, manual parent walk | 3-generation ancestry from process cache with grandparent image paths |
+| **Is someone injecting code?** | `!address`, manual VAD walk | Thread start in foreign process + image_load of suspicious DLL + burst detection |
+| **What TLS ciphers are negotiated?** | Network capture + TLS inspection | Schannel events with protocol version, cipher suite, certificate details |
+| **Why did this DNS query fail?** | `nslookup`, packet capture | DNS-Client events with query name, type, status (NTSTATUS decoded), and response codes |
+| **What PowerShell ran on this box?** | Event log 4104 scraping | PowerShell script block logging with full script text, obfuscation scoring, and pipeline IDs |
 
-**`longhorizons-patterns` — The trend layer.** Aggregated statistics documents emitted on a configurable interval (default: every 5 minutes or every N events). Track fleet-level behavioral drift:
+---
 
-| Metric | Use |
-|---|---|
-| `frequency_estimate` | How often this behavior occurs across all hosts (CMS estimate) |
-| `dropped_count` | Events dropped due to backpressure — a spike here means the pipeline is saturated |
-| `pattern_type` | Categorizes the pattern document: `frequency_update`, `rarity_transition`, `new_behavior`, `payload_deviation` |
-| Cross-host count | How many distinct agent IDs have reported this behavior |
-| Rarity band transitions | A behavior that moved from Common → Uncommon (dormant threat? cleanup completed?) |
+## Use Cases
 
-**`longhorizons-diagnostics` — The meta-baseline.** The pipeline observing itself. Diagnostics documents are exported on a health-check interval and whenever a state transition occurs:
+**SOC Triage**: Rare events surface immediately. Common events are pre-scored and deduplicated. Analysts spend time on novel signals, not the 400th `svchost.exe` DNS lookup.
 
-| Signal | Meaning |
-|---|---|
-| `etw_restart_count` | ETW session has been lost and recreated — possible tampering or provider conflict |
-| `dropped_events` | Pipeline backpressure exceeded capacity — events were dropped |
-| `shard_backpressure[N]` | Per-shard queue depth — hot shards indicate skewed behavior distribution |
-| `disk_free_gb` | Available disk space on the agent host |
-| `events_per_second` | Throughput — a sudden drop may indicate ETW provider failure or system load |
-| `outbox_depth` / `dead_letter_depth` | Export health — growing outbox means ES is unreachable; dead-letter means data loss risk |
+**Threat Hunting**: Query across all endpoints by `stable_hash`. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
 
-### Why This Matters Operationally
+**Incident Response**: Reconstruct full process trees with command lines from the PEB, inter-event timing deltas, 3-generation ancestry, and cross-process network correlation.
 
-A SOC team running conventional log forwarding has to build all of this themselves — dashboards for pipeline health, queries for behavioral frequency, manual sampling for exemplars, threshold tuning for anomaly detection. LongHorizons ships it pre-computed:
+**Compliance**: Continuous behavioral baseline with cryptographic integrity. Demonstrate complete process, network, registry, and file operation capture for audit.
 
-- **Onboarding a new analyst:** Query `rarity_band:rare` across the events index. That's the investigation surface. No manual baseline building required.
-- **Fleet health check:** Query the diagnostics index for `dropped_events > 0` or `etw_restart_count > 0` in the last 24 hours. Every host with a degraded pipeline surfaces immediately.
-- **Behavioral drift detection:** Query the patterns index for `pattern_type:rarity_transition`. Behaviors that changed rarity bands in the last interval — a dormant threat waking up, or a cleanup operation completing — are surfaced without manual trend analysis.
-- **Threat hunting at scale:** "Show me every host that has exhibited behavior X" is a single term query on `tokens.stable_hex` across the events index, even if X was first observed on a different host six months ago.
+**AI/ML Dataset Generation**: Pre-enriched, deduplicated corpus — drop directly into LLM fine-tuning, anomaly detection models, or graph-based behavioral analysis.
 
-### ILM Retention Policy
+**Windows Internals Research**: Every kernel subsystem's operations, decoded and queryable. Build a behavioral taxonomy of Windows without a kernel debugger.
 
-Index Lifecycle Management keeps the storage footprint predictable:
+**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by `stable_hash`. Measure detection coverage, identify gaps, validate SIEM rules.
 
-| Phase | Duration | Action |
-|---|---|---|
-| Hot | 0–7 days | Active indexing, full replicas, 5s refresh |
-| Warm | 7–30 days | Read-only, reduced replicas, force-merged to 1 segment |
-| Cold | 30–90 days | Read-only, no replicas, mounted on searchable snapshots |
-| Delete | 90+ days | Index deleted |
+**Forensics**: Event timeline with inter-event timing, process lineage, and full command lines. All codes decoded. All paths normalized. No raw hex values to decipher.
 
-Patterns and diagnostics indexes retain for longer (365 days) to provide year-over-year behavioral trend comparison. Events and exemplars follow the 90-day cycle. See [ES-INDEX-TEMPLATES.md](ES-INDEX-TEMPLATES.md) for the full configuration.
+---
 
-## Architecture & Technology Stack
 
-**Language**: Rust (zero runtime dependencies, single ~8 MB binary)
-**Database**: SQLite with WAL mode, AES-256-GCM encrypted blobs
-**Concurrency**: 8-way hash-sharded pipeline with parking_lot mutexes; lock-free Count-Min Sketch
-**Export**: Durable outbox with gzip compression, retry with exponential backoff, dead-letter queue, optional TLS certificate pinning
-**ETW Integration**: Native Windows Trace Data Helper (TDH) API for property resolution across 47 kernel and user-mode providers
-**Cryptography**: Deterministic SHA-256 token generation, HKDF-SHA256 key derivation, DPAPI-protected master key (LocalMachine scope)
+## Quick Start
 
-### Crate Map
-
-```
-agent-service     Windows service wrapper + CLI (install/run/test)
-    │
-agent-etw         ETW session management (StartTraceW, EnableTraceEx2,
-    │             OpenTraceW, ProcessTrace) + TDH property parsing
-    │
-agent-core        ┌─ config.rs          — TOML configuration
-    │             ├─ models.rs          — NormalizedEvent (200+ fields)
-    │             ├─ normalization.rs   — SID/IP/directory normalization
-    │             ├─ tokenization.rs    — Deterministic token builders
-    │             ├─ pipeline.rs        — BaseliningPipeline (CMS, reservoir)
-    │             ├─ sharded_pipeline.rs— 8-way sharded ingest
-    │             ├─ cms.rs             — Count-Min Sketch
-    │             ├─ reservoir.rs       — Exemplar reservoir sampling
-    │             ├─ db.rs              — SQLite with WAL, encrypted blobs
-    │             ├─ crypto.rs          — AES-256-GCM + HKDF-SHA256
-    │             └─ sysinfo.rs         — Host/network enumeration
-    │
-agent-exporter    Outbox worker → Elasticsearch bulk API (gzip, retry,
-                  dead-letter, TLS pinning)
-```
-
-### Data Flow
-
-1. **ETW Session** receives real-time events from 47 registered providers
-2. **TDH Parser** extracts typed properties from each event record
-3. **Mapping** converts raw properties into a `NormalizedEvent` (200+ typed fields)
-4. **ShardedPipeline** (8-way hash-sharded):
-   - Populates process cache (PID → image path, command line, modules)
-   - Computes enrichments: timing deltas, process trees, behavior tags, burst detection
-   - Extracts search terms from key field values
-   - Builds deterministic `stable_hash` and `payload_hash` tokens
-   - Routes to one of 8 independent baselining shards
-5. **BaseliningPipeline** (per shard):
-   - Upserts stable token in SQLite → gets decay score and rarity band
-   - Updates Count-Min Sketch and promoted exact counters
-   - Manages exemplar reservoir (reservoir sampling with richness scoring)
-   - Writes event, exemplar, and pattern documents to outbox tables
-6. **Exporter** polls outbox tables, assembles bulk requests, ships to Elasticsearch
-
-### Enrichment Features (in exported event documents)
-
-| Feature | Description |
-|---|---|
-| Inter-event timing | `delta_ms_since_prev`, `delta_ms_since_process_start` — for timeline reasoning |
-| Preceding token reference | `prev_stable_hex`, `prev_payload_hex` — what this process did last |
-| Tree depth | Process ancestry depth (parent → grandparent → ...) |
-| Payload deviation | Running hash distance from prior events for same PID |
-| Ancestor chain hash | SHA-256 of "grandparent\|parent\|current" image paths |
-| Threat intel | `vt_hash_match`, `abuseipdb_category`, `domain_registration_days`, `cert_valid` |
-| Logon session | `logon_id`, `logon_type`, `logon_guid` — correlates to 4624 events |
-| PE metadata | `compile_timestamp`, `section_count`, `import_table_entropy`, `debug_path` |
-| Cross-process correlation | PIDs of other processes contacting the same network destination |
-| Behavioral tags | `first_seen_binary`, `from_temp_dir`, `encoded_command`, `network_to_loopback`, etc. |
-| Burst context | Events in last 5s/60s, total event count for this PID |
-| Process classification | `system_signed`, `unsigned`, `unknown` |
-| Field completeness | 0-1 score of how many fields are populated |
-
-## Security
-
-- **Encryption at rest**: Sensitive DB blobs encrypted with AES-256-GCM
-- **Master key**: Auto-generated on first run, DPAPI-protected (LocalMachine scope)
-- **Purpose keys**: Derived via HKDF-SHA256 per table/operation
-- **API keys**: Can be stored as DPAPI-protected blobs in config or plaintext (then auto-sealed)
-- **TLS pinning**: Optional SHA-256 certificate pinning per export endpoint
-
-## Performance Notes
-
-- **Memory**: ~150-300 MB under normal load (8 shards, process cache, enrichment state)
-- **CPU**: Low single-digit % at idle; spikes during tokenization for high-volume providers
-- **Disk**: SQLite WAL mode with bounded outbox retention (configurable, default 7 days)
-- **Backpressure**: Bounded channels with dropped-event metrics; ETW restart counter tracked
-- **Sharding**: 8 independent baselining shards eliminate lock contention on CMS/reservoir
-
-## Troubleshooting
-
-| Symptom | Check |
-|---|---|
-| Agent won't start | Must run as Administrator or LocalSystem |
-| No events | ETW session name collision — change `etw.session_name` |
-| ES export failing | Verify endpoint reachable, API key valid, index template exists |
-| High CPU | Disable high-volume providers: `enable_kernel_interrupts = false`, `enable_kernel_threading = false` |
-| Disk growing | Reduce `outbox_retention_seconds` or check ES connectivity |
-| `Access Denied` on ES | Verify API key has `create_index` and `write` privileges on `longhorizons-*` |
-
-## Managing
+### 1. Build
 
 ```powershell
-# Service control
-sc.exe start LongHorizonsTelemetryAgent
-sc.exe stop LongHorizonsTelemetryAgent
-sc.exe query LongHorizonsTelemetryAgent
-
-# Health status
-curl http://127.0.0.1:8080/health
-
-# Uninstall
-sc.exe stop LongHorizonsTelemetryAgent
-.\agent.exe uninstall
+cargo build --release
+# Binary at: target\release\agent.exe (~8 MB)
 ```
+
+### 2. Configure
+
+Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml` and set:
+- `agent.id` — unique host identifier
+- `export.events.endpoint` — Elasticsearch URL
+- `export.events.api_key` — ES API key
+
+### 3. Test run
+
+```powershell
+.\target\release\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
+```
+
+### 4. Install as Windows service
+
+```powershell
+.\install.ps1
+```
+
+---
+
+## Elasticsearch Indexes
+
+| Index | Content | Volume |
+|-------|---------|--------|
+| `telemetry-events-YYYY.MM.DD` | Individual events with full enrichment | High |
+| `telemetry-exemplars-YYYY.MM.DD` | Representative samples per stable token | Low |
+| `telemetry-patterns` | Aggregated pattern statistics | Medium |
+| `telemetry-diagnostics` | Agent health and self-monitoring | Very low |
+
+---
+
+## Build & Test Verification
+
+```
+cargo check  — 0 errors (all 4 crates)
+cargo test   — 71 passed, 0 failed
+   agent-core:      43 tests
+   agent-etw:       28 tests
+   agent-exporter:   0 tests
+```
+
+---
+
+*Document updated 2026-05-29 — Reflects v0.1.0 with complete data quality overhaul*

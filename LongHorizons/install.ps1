@@ -161,7 +161,8 @@ try {
     $health = Invoke-RestMethod -Uri "http://127.0.0.1:$HealthPort/health" -TimeoutSec 10 -ErrorAction Stop
     Write-Host "  Status:  $($health.status)" -ForegroundColor Green
     Write-Host "  Version: $($health.version)"
-    Write-Host "  Host:    $($health.host_name) ($($health.host_id))"
+    Write-Host "  Host:    $($health.host.name) ($($health.host.id))"
+    Write-Host "  OS:      $($health.host.os_version)"
 } catch {
     Write-Host "  Health check failed. The service may still be starting." -ForegroundColor Magenta
     Write-Host "  Try again in a few seconds: Invoke-RestMethod http://127.0.0.1:$HealthPort/health"
