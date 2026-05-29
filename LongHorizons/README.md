@@ -286,11 +286,12 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 ## Quick Start
 
-### 1. Build
+### 1. Download
 
-```powershell
-cargo build --release
-# Binary at: target\release\agent.exe (~8 MB)
+The LongHorizons agent is distributed as a pre-built Windows binary (~8 MB, no dependencies). Extract `release.zip` from the repository:
+
+```
+LongHorizons/release.zip   -->   agent.exe, config.toml, install.ps1, uninstall.ps1
 ```
 
 ### 2. Configure
@@ -303,7 +304,7 @@ Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml
 ### 3. Test run
 
 ```powershell
-.\target\release\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
+.\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
 ```
 
 ### 4. Install as Windows service
@@ -324,16 +325,6 @@ Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml
 | `telemetry-diagnostics` | Agent health and self-monitoring | Very low |
 
 ---
-
-## Build & Test Verification
-
-```
-cargo check  — 0 errors (all 4 crates)
-cargo test   — 71 passed, 0 failed
-   agent-core:      43 tests
-   agent-etw:       28 tests
-   agent-exporter:   0 tests
-```
 
 ---
 

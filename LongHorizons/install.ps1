@@ -37,8 +37,7 @@ if (-not (Test-Path $ConfigPath)) {
 
 if (-not (Test-Path $BinaryPath)) {
     Write-Host "ERROR: agent.exe not found at: $BinaryPath" -ForegroundColor Red
-    Write-Host "Build it first: cargo build --release" -ForegroundColor Red
-    Write-Host "Then copy target\release\agent.exe to the Presentation directory." -ForegroundColor Red
+    Write-Host "Extract release.zip and place agent.exe alongside this installer." -ForegroundColor Red
     exit 1
 }
 
