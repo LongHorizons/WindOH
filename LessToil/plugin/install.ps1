@@ -377,6 +377,19 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
         }
 
         $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "LessToil\plugin"
+
+        # If cloned dir has zip but not extracted source, extract the zip
+        if (-not (Test-Path (Join-Path $LOCAL_PLUGIN_SRC "core\manifest.py"))) {
+            $clonedZip = Join-Path $LOCAL_PLUGIN_SRC "repo-cognition.zip"
+            if (Test-Path $clonedZip) {
+                $ZIP_TEMP = Join-Path ([System.IO.Path]::GetTempPath()) "repo-cognition-$PID"
+                if (Test-Path $ZIP_TEMP) { Remove-Item -Recurse -Force $ZIP_TEMP -ErrorAction SilentlyContinue }
+                Write-Detail "Extracting plugin from cloned zip..."
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($clonedZip, $ZIP_TEMP)
+                $LOCAL_PLUGIN_SRC = $ZIP_TEMP
+            }
+        }
     } else {
         Write-Err "git not found on PATH. The installer requires git to fetch the plugin from GitHub."
         Write-Err ""
