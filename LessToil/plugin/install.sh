@@ -11,11 +11,17 @@
 #   bash install.sh --no-venv                # Skip venv creation, use system Python directly
 #
 # One-liner (from GitHub):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
 #
 # Installs plugin to ~/.claude/plugins/repo-cognition/ and sets up the target project.
 # Source priority: --from-zip FILE → local clone (if running from plugin dir) → GitHub clone
 
+# Require bash — pipefail, [[, and local are bashisms not available in sh/dash
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "ERROR: This installer requires bash. Please run: bash install.sh"
+    echo "       Avoid:  sh install.sh"
+    exit 1
+fi
 set -euo pipefail
 
 PLUGIN_NAME="repo-cognition"
@@ -23,12 +29,12 @@ PLUGIN_DIR="${HOME}/.claude/plugins/${PLUGIN_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ANSI formatting
-BOLD=$'\033[1m'
-DIM=$'\033[2m'
-RESET=$'\033[0m'
-GREEN=$'\033[32m'
-YELLOW=$'\033[33m'
-RED=$'\033[31m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
 
 # --- Parse arguments ---------------------------------------------------------
 PROJECT_DIR="${PWD}"
@@ -71,122 +77,48 @@ if [ "$PLUGIN_ONLY" = false ] && [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-# --- Dependency check ---------------------------------------------------------
-# Detect package manager for install commands
-PKG_MANAGER=""
-PKG_INSTALL=""
-PKG_UPDATE=""
-for mgr in apt-get dnf brew pacman apk; do
-    if command -v "$mgr" &>/dev/null; then
-        PKG_MANAGER="$mgr"
-        break
-    fi
-done
-case "$PKG_MANAGER" in
-    apt-get) PKG_INSTALL="sudo apt-get install -y -qq"; PKG_UPDATE="sudo apt-get update -qq" ;;
-    dnf)     PKG_INSTALL="sudo dnf install -y";     PKG_UPDATE="" ;;
-    brew)    PKG_INSTALL="brew install";             PKG_UPDATE="" ;;
-    pacman)  PKG_INSTALL="sudo pacman -S --noconfirm"; PKG_UPDATE="" ;;
-    apk)     PKG_INSTALL="sudo apk add";             PKG_UPDATE="" ;;
-esac
-
-# Collect missing dependencies
-MISSING_DEPS=()
-MISSING_LABELS=()
-
-check_cmd() {
-    command -v "$1" &>/dev/null && return 0 || return 1
-}
-
-# Python 3.8+
+# --- Detect Python ----------------------------------------------------------
 PYTHON=""
 for candidate in python3 python; do
-    if check_cmd "$candidate"; then
+    if command -v "$candidate" &>/dev/null; then
         case "$("$candidate" --version 2>&1)" in
-            "Python 3."*)
-                PY_MAJOR=$("$candidate" -c "import sys; print(sys.version_info[0])" 2>/dev/null || echo 0)
-                PY_MINOR=$("$candidate" -c "import sys; print(sys.version_info[1])" 2>/dev/null || echo 0)
-                if [ "$PY_MAJOR" -ge 3 ] && [ "$PY_MINOR" -ge 8 ]; then
-                    PYTHON="$candidate"
-                    break
-                fi
-                ;;
+            "Python 3."*) PYTHON="$candidate"; break ;;
         esac
     fi
 done
-if [ -z "$PYTHON" ]; then
-    MISSING_DEPS+=("python3 python3-pip python3-venv")
-    MISSING_LABELS+=("Python 3.8+ (python3, pip, venv)")
-fi
 
-# git
-if ! check_cmd git; then
-    MISSING_DEPS+=("git")
-    MISSING_LABELS+=("Git")
-fi
-
-# Handle missing dependencies
-if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
-    echo ""
-    echo "The following dependencies are missing:"
-    for label in "${MISSING_LABELS[@]}"; do
-        echo "  - $label"
+# Auto-install Python if missing and --accept was given
+if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
+    echo "Python 3.8+ not found. --accept: attempting auto-install..."
+    if command -v apt-get &>/dev/null; then
+        echo "      Detected apt-get — installing python3..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
+    elif command -v brew &>/dev/null; then
+        echo "      Detected Homebrew — installing python3..."
+        brew install python3 2>&1 || true
+    elif command -v dnf &>/dev/null; then
+        echo "      Detected dnf — installing python3..."
+        sudo dnf install -y python3 python3-pip 2>&1 || true
+    elif command -v pacman &>/dev/null; then
+        echo "      Detected pacman — installing python3..."
+        sudo pacman -S --noconfirm python python-pip 2>&1 || true
+    elif command -v apk &>/dev/null; then
+        echo "      Detected apk — installing python3..."
+        sudo apk add python3 py3-pip 2>&1 || true
+    fi
+    # Re-detect
+    for candidate in python3 python; do
+        if command -v "$candidate" &>/dev/null; then
+            case "$("$candidate" --version 2>&1)" in
+                "Python 3."*) PYTHON="$candidate"; break ;;
+            esac
+        fi
     done
-    echo ""
-
-    if [ -z "$PKG_MANAGER" ]; then
-        echo "No supported package manager detected (apt, dnf, brew, pacman, apk)."
-        echo "Please install the missing dependencies manually and re-run."
-        exit 1
-    fi
-
-    if [ "$ACCEPT" = true ]; then
-        echo "--accept: auto-installing missing dependencies with $PKG_MANAGER..."
-        [ -n "$PKG_UPDATE" ] && $PKG_UPDATE 2>&1 || true
-        for pkg_list in "${MISSING_DEPS[@]}"; do
-            echo "      Installing: $pkg_list"
-            $PKG_INSTALL $pkg_list 2>&1 || true
-        done
-    else
-        echo "Install them now using your package manager? [Y/n]"
-        echo ""
-        echo "  $PKG_INSTALL ${MISSING_DEPS[*]}"
-        echo ""
-        read -r REPLY
-        case "${REPLY:-y}" in
-            [Yy]|[Yy][Ee][Ss])
-                [ -n "$PKG_UPDATE" ] && $PKG_UPDATE 2>&1 || true
-                for pkg_list in "${MISSING_DEPS[@]}"; do
-                    $PKG_INSTALL $pkg_list 2>&1 || {
-                        echo "WARNING: Failed to install $pkg_list — continuing anyway."
-                    }
-                done
-                ;;
-            *)
-                echo "Dependencies required. Re-run with --accept for non-interactive install,"
-                echo "or install manually and try again."
-                exit 1
-                ;;
-        esac
-    fi
-
-    # Re-detect Python after install
-    if [ -z "$PYTHON" ]; then
-        for candidate in python3 python; do
-            if check_cmd "$candidate"; then
-                case "$("$candidate" --version 2>&1)" in
-                    "Python 3."*) PYTHON="$candidate"; break ;;
-                esac
-            fi
-        done
-    fi
-    echo ""
 fi
 
-# Final Python check
 if [ -z "$PYTHON" ]; then
-    echo "ERROR: Python 3.8+ required but was not installed successfully."
-    echo "       Install from https://python.org and re-run."
+    echo "ERROR: Python 3.8+ required but not found. Install from https://python.org"
+    echo "       Or re-run with --accept to attempt automatic installation."
     exit 1
 fi
 
@@ -212,7 +144,7 @@ if [ "$NO_VENV" = false ]; then
         }
     fi
     if [ "$NO_VENV" = false ]; then
-        # Bootstrap pip if missing (Ubuntu's python3-venv may omit it) then upgrade
+        # Upgrade pip inside the venv
         if [ -f "${VENV_DIR}/bin/python" ]; then
             VENV_PYTHON="${VENV_DIR}/bin/python"
             VENV_PIP="${VENV_DIR}/bin/pip"
@@ -225,9 +157,6 @@ if [ "$NO_VENV" = false ]; then
         fi
     fi
     if [ "$NO_VENV" = false ]; then
-        if ! "$VENV_PYTHON" -m pip --version 2>/dev/null; then
-            "$VENV_PYTHON" -m ensurepip --upgrade 2>/dev/null || true
-        fi
         "$VENV_PYTHON" -m pip install --quiet --upgrade pip 2>/dev/null || true
         echo "      Venv ready: $VENV_PYTHON"
     fi
@@ -309,43 +238,34 @@ fi
 GIT_TEMP_DIR=""
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     if ! command -v git &>/dev/null; then
-        echo "ERROR: git is required but not available. Re-run with --accept for auto-install."
+        echo "ERROR: git not found on PATH. The installer requires git to fetch the plugin."
+        echo ""
+        echo "Install git from https://git-scm.com/downloads or run this script"
+        echo "from a local clone of the repository, or use --from-zip."
         exit 1
     fi
 
     GIT_TEMP_DIR="$(mktemp -d)"
-    echo "      Fetching plugin from GitHub..."
+    echo "      Fetching plugin from GitHub (sparse checkout)..."
 
-    if git clone --depth 1 \
-        https://github.com/LongHorizons/WindOH.git "$GIT_TEMP_DIR" 2>/dev/null; then
-        SCRIPT_DIR="${GIT_TEMP_DIR}/LessToil/plugin"
+    if git clone --depth 1 --filter=blob:none --sparse \
+        https://github.com/LongHorizons/WindOH/LessToil.git "$GIT_TEMP_DIR" 2>/dev/null; then
+        (cd "$GIT_TEMP_DIR" && git sparse-checkout set "plugins/repo-cognition" 2>/dev/null)
+        SCRIPT_DIR="${GIT_TEMP_DIR}/plugins/repo-cognition"
     else
-        echo "ERROR: Failed to clone repository. Check your internet connection and GitHub access."
+        # Fallback: full shallow clone for older git versions
+        echo "      Sparse checkout not supported, trying full shallow clone..."
         rm -rf "$GIT_TEMP_DIR"
-        exit 1
+        GIT_TEMP_DIR="$(mktemp -d)"
+        if git clone --depth 1 \
+            https://github.com/LongHorizons/WindOH/LessToil.git "$GIT_TEMP_DIR" 2>/dev/null; then
+            SCRIPT_DIR="${GIT_TEMP_DIR}/plugins/repo-cognition"
+        else
+            echo "ERROR: Failed to clone repository. Check your internet connection and GitHub access."
+            rm -rf "$GIT_TEMP_DIR"
+            exit 1
+        fi
     fi
-fi
-
-# After GitHub clone, SCRIPT_DIR points to LessToil/plugin which contains
-# repo-cognition.zip — extract it if we don't have core/manifest.py yet.
-if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ] && [ -f "${SCRIPT_DIR}/repo-cognition.zip" ]; then
-    ZIP_TEMP="$(mktemp -d)"
-    echo "      Extracting plugin from repo-cognition.zip..."
-    if command -v unzip &>/dev/null; then
-        unzip -q "${SCRIPT_DIR}/repo-cognition.zip" -d "$ZIP_TEMP"
-    elif "$INSTALL_PYTHON" -c "import zipfile" 2>/dev/null; then
-        "$INSTALL_PYTHON" -c "
-import zipfile
-zf = zipfile.ZipFile('${SCRIPT_DIR}/repo-cognition.zip')
-zf.extractall('$ZIP_TEMP')
-print(f'Extracted {len(zf.namelist())} files')
-"
-    else
-        echo "ERROR: Neither 'unzip' nor Python zipfile available."
-        rm -rf "$ZIP_TEMP"
-        exit 1
-    fi
-    SCRIPT_DIR="$ZIP_TEMP"
 fi
 
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
@@ -366,7 +286,12 @@ copy_dir() {
     local name="$3"
     if [ -d "$src" ]; then
         mkdir -p "$dst"
+        # Copy regular files (non-hidden)
         cp -r "$src"/* "$dst/" 2>/dev/null || true
+        # Copy hidden files too (shell glob * skips dotfiles)
+        for hidden in "$src"/.[!.]*; do
+            [ -e "$hidden" ] && cp -r "$hidden" "$dst/" 2>/dev/null || true
+        done
         local count
         count=$(find "$dst" -maxdepth 1 -type f | wc -l)
         echo "      $name ($count files)"
@@ -409,20 +334,15 @@ fi
 
 echo ""
 
-# Rewrite hooks.json to use venv python (if venv is active)
-if [ -n "$VENV_DIR" ] && [ -f "${PLUGIN_DIR}/hooks/hooks.json" ]; then
-    # Replace "python " with the absolute path to the venv python
-    # Use a temporary file for cross-platform compatibility
-    VENV_PYTHON_PATH="${VENV_DIR}/bin/python"
-    if [ ! -f "$VENV_PYTHON_PATH" ]; then
-        VENV_PYTHON_PATH="${VENV_DIR}/bin/python3"
-    fi
-    if [ -f "$VENV_PYTHON_PATH" ]; then
-        TEMP_HOOKS="$(mktemp)"
-        sed "s|\"python \"|\"${VENV_PYTHON_PATH} \"|g" "${PLUGIN_DIR}/hooks/hooks.json" > "$TEMP_HOOKS"
-        mv "$TEMP_HOOKS" "${PLUGIN_DIR}/hooks/hooks.json"
-        echo "      hooks.json: using $VENV_PYTHON_PATH"
-    fi
+# Rewrite hooks.json to use the resolved Python path (venv or system).
+# This prevents "python: command not found" on Linux systems where only
+# python3 exists, while also pinning the venv Python when applicable.
+if [ -f "${PLUGIN_DIR}/hooks/hooks.json" ]; then
+    PYTHON_ABS="$(command -v "$INSTALL_PYTHON" 2>/dev/null || echo "$INSTALL_PYTHON")"
+    TEMP_HOOKS="$(mktemp)"
+    sed "s|\"python \"|\"${PYTHON_ABS} \"|g" "${PLUGIN_DIR}/hooks/hooks.json" > "$TEMP_HOOKS"
+    mv "$TEMP_HOOKS" "${PLUGIN_DIR}/hooks/hooks.json"
+    echo "      hooks.json: using $PYTHON_ABS"
 fi
 
 # =============================================================================

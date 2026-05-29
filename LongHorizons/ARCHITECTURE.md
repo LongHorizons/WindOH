@@ -2,26 +2,27 @@
 
 ## Crate Map
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│ agent-service (binary crate)                                    │
-│   main.rs, service.rs, health.rs, diagnostic.rs                 │
-│   Windows service wrapper + CLI (install / run / test /         │
-│   uninstall). Orchestrates all other crates.                    │
-└──────────┬──────────┬──────────────┬────────────────────────────┘
-           │          │              │
-    ┌──────▼───┐ ┌───▼──────┐ ┌─────▼──────────┐
-    │agent-etw  │ │agent-core│ │agent-exporter   │
-    │           │ │          │ │                 │
-    │session.rs │ │models.rs │ │shipper.rs       │
-    │mapping.rs │ │config.rs │ │(ES bulk API)    │
-    │tdh.rs     │ │pipeline  │ │outbox polling   │
-    │           │ │tokenizat.│ │retry+deadletter │
-    └───────────┘ │db.rs     │ └─────────────────┘
-                  │crypto.rs │
-                  │cms.rs    │
-                  │reservoir │
-                  └──────────┘
+```mermaid
+graph TB
+    subgraph service ["agent-service (binary crate)"]
+        main["main.rs, service.rs<br/>health.rs, diagnostic.rs<br/>Windows service wrapper + CLI"]
+    end
+
+    subgraph etw ["agent-etw"]
+        etw_files["session.rs<br/>mapping.rs<br/>tdh.rs"]
+    end
+
+    subgraph core ["agent-core"]
+        core_files["models.rs<br/>config.rs<br/>pipeline.rs<br/>tokenization.rs<br/>db.rs<br/>crypto.rs<br/>cms.rs<br/>reservoir.rs"]
+    end
+
+    subgraph exporter ["agent-exporter"]
+        exp_files["shipper.rs<br/>(ES bulk API)<br/>outbox polling<br/>retry+deadletter"]
+    end
+
+    service --> etw
+    service --> core
+    service --> exporter
 ```
 
 ---
@@ -30,21 +31,16 @@
 
 ### Phase 1: ETW Capture (`agent-etw`)
 
-```
-StartTraceW() → EnableTraceEx2(47 providers) → OpenTraceW()
-                                                    │
-                    ProcessTrace() ◄── callback ────┘
-                         │
-                    EVENT_RECORD
-                         │
-                    TdhGetEventInformation()
-                    TdhGetProperty() × N
-                         │
-                    HashMap<String, Value>
-                         │
-                    mapping.rs::map_event()
-                         │
-                    NormalizedEvent
+```mermaid
+flowchart TD
+    A["StartTraceW()"] --> B["EnableTraceEx2<br/>(47 providers)"]
+    B --> C["OpenTraceW()"]
+    C --> D["ProcessTrace()<br/>callback"]
+    D --> E["EVENT_RECORD"]
+    E --> F["TdhGetEventInformation()<br/>TdhGetProperty() × N"]
+    F --> G["HashMap&lt;String, Value&gt;"]
+    G --> H["mapping.rs::map_event()"]
+    H --> I["NormalizedEvent"]
 ```
 
 **Key decisions:**
@@ -55,44 +51,19 @@ StartTraceW() → EnableTraceEx2(47 providers) → OpenTraceW()
 
 ### Phase 2: Normalization & Enrichment (`agent-core/sharded_pipeline.rs`)
 
-```
-NormalizedEvent
-      │
-  ┌───▼────────────────────────────────────────────────────┐
-  │ 1. populate_process_cache_inner()                       │
-  │    Fill PID → image path, command line, modules,        │
-  │    parent lineage, logon session from shared cache       │
-  ├────────────────────────────────────────────────────────┤
-  │ 2. populate_logon_session_cache()                       │
-  │    On user_logon events: store logon_id → (type, guid)  │
-  ├────────────────────────────────────────────────────────┤
-  │ 3. compute_enrichments()                                │
-  │    • Inter-event timing (delta from prev/start)         │
-  │    • Preceding token reference (what did this PID do?)  │
-  │    • Tree depth (parent → grandparent chain depth)      │
-  │    • Ancestor chain hash (SHA-256 of image chain)       │
-  │    • Behavior tags (11 boolean heuristics)              │
-  │    • Burst metrics (events in 5s/60s windows)           │
-  │    • First-seen binary detection (HashSet)              │
-  │    • Process classification (signed/unsigned/etc.)      │
-  │    • Network cross-process correlation                  │
-  │    • PE metadata (compile timestamp, sections, imports) │
-  │    • Logon session metadata lookup                      │
-  │    • Field completeness score                           │
-  ├────────────────────────────────────────────────────────┤
-  │ 4. extract_terms()                                      │
-  │    Tokenize search terms from key field values          │
-  ├────────────────────────────────────────────────────────┤
-  │ 5. build_tokens()                                       │
-  │    Generate stable_hash (what) and payload_hash (exact) │
-  ├────────────────────────────────────────────────────────┤
-  │ 6. update_enrichment_post_tokens()                      │
-  │    Store last tokens for next-event preceding reference │
-  │    Update payload deviation scores                      │
-  ├────────────────────────────────────────────────────────┤
-  │ 7. pick_shard() → shard.ingest()                        │
-  │    Route event to 1 of 8 shards by stable_hash[..8]     │
-  └────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[NormalizedEvent] --> B
+    subgraph pipeline ["7-Stage Pipeline"]
+        B["1. populate_process_cache_inner()<br/>Fill PID → image path, command line,<br/>modules, parent lineage, logon session"]
+        C["2. populate_logon_session_cache()<br/>On user_logon events:<br/>store logon_id → (type, guid)"]
+        D["3. compute_enrichments()<br/>Inter-event timing · Preceding token<br/>Tree depth · Ancestor chain hash<br/>Behavior tags (11) · Burst metrics<br/>First-seen binary · Process classification<br/>Network correlation · PE metadata<br/>Logon session · Field completeness"]
+        E["4. extract_terms()<br/>Tokenize search terms<br/>from key field values"]
+        F["5. build_tokens()<br/>Generate stable_hash (what)<br/>and payload_hash (exact)"]
+        G["6. update_enrichment_post_tokens()<br/>Store last tokens for next-event<br/>preceding reference · Update payload<br/>deviation scores"]
+        H["7. pick_shard() → shard.ingest()<br/>Route event to 1 of 8 shards<br/>by stable_hash[..8]"]
+    end
+    B --> C --> D --> E --> F --> G --> H
 ```
 
 **Why 8 shards:** Lock contention elimination. Each shard has its own CMS, reservoir, and process cache. Tokenization runs once; the stable hash deterministically routes to one shard.
@@ -101,29 +72,18 @@ NormalizedEvent
 
 ### Phase 3: Baselining (`agent-core/pipeline.rs`)
 
-```
-shard.ingest_event_with_pretokenized(event, tokens)
-      │
-  ┌───▼─────────────────────────────────────────────┐
-  │ db.upsert_stable_token(stable_hash)              │
-  │   → Returns: is_new_stable, decay_score,         │
-  │     rarity_band, times_seen                     │
-  ├─────────────────────────────────────────────────┤
-  │ cms.observe(stable_hash)                          │
-  │   Count-Min Sketch increment for global frequency │
-  ├─────────────────────────────────────────────────┤
-  │ Promoted exact counter (for payload variants)     │
-  │   If observation count > threshold: exact counting │
-  ├─────────────────────────────────────────────────┤
-  │ reservoir.offer(stable_hash, event)               │
-  │   Reservoir sampling with richness scoring        │
-  ├─────────────────────────────────────────────────┤
-  │ If new_stable || boundary_cross || risk:         │
-  │   Write exemplar document to outbox               │
-  ├─────────────────────────────────────────────────┤
-  │ If rarity ≤ export_threshold_score:              │
-  │   Write event document to outbox                  │
-  └─────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["shard.ingest_event_with_pretokenized<br/>(event, tokens)"] --> B
+    subgraph baselining ["Baselining Pipeline"]
+        B["db.upsert_stable_token(stable_hash)<br/>→ Returns: is_new_stable, decay_score,<br/>  rarity_band, times_seen"]
+        C["cms.observe(stable_hash)<br/>Count-Min Sketch increment<br/>for global frequency"]
+        D["Promoted exact counter<br/>(for payload variants)<br/>If observation count > threshold:<br/>exact counting"]
+        E["reservoir.offer(stable_hash, event)<br/>Reservoir sampling with<br/>richness scoring"]
+        F["If new_stable or boundary_cross or risk:<br/>Write exemplar document to outbox"]
+        G["If rarity ≤ export_threshold_score:<br/>Write event document to outbox"]
+    end
+    B --> C --> D --> E --> F --> G
 ```
 
 **Decay scoring:**
@@ -136,27 +96,18 @@ Rarity bands are computed from the decay score against `rare_threshold` and `com
 
 ### Phase 4: Export (`agent-exporter`)
 
-```
-OutboxWorker (background thread)
-      │
-      ▼
-  SELECT * FROM outbox WHERE sent = 0
-  ORDER BY priority, created_at
-      │
-      ▼
-  Batch assembly (up to bulk_max_docs or bulk_max_bytes)
-      │
-      ▼
-  POST /_bulk (gzip compressed)
-      │
-  ┌───┴───┐
-  │       │
-Success  Failure
-  │       │
-  ▼       ▼
-Mark    Increment attempt counter
-sent    If attempts > max: dead letter
-        Else: reschedule with backoff
+```mermaid
+flowchart TD
+    A["OutboxWorker<br/>(background thread)"] --> B
+    B["SELECT * FROM outbox<br/>WHERE sent = 0<br/>ORDER BY priority, created_at"]
+    B --> C["Batch assembly<br/>(up to bulk_max_docs<br/>or bulk_max_bytes)"]
+    C --> D["POST /_bulk<br/>(gzip compressed)"]
+    D --> E{Result}
+    E -->|"Success"| F["Mark sent"]
+    E -->|"Failure"| G["Increment attempt counter"]
+    G --> H{"attempts > max?"}
+    H -->|"Yes"| I["Dead letter"]
+    H -->|"No"| J["Reschedule with backoff"]
 ```
 
 ---
@@ -192,26 +143,35 @@ To reduce data volume, explicitly set providers to `false` and adjust `baselinin
 
 ## Concurrency Model
 
-```
-Main Thread                    ETW Callback Thread
-─────────────                  ────────────────────
-Agent::run()                   ProcessTrace() callback
-  │                              │
-  ├─ ETW session start           ├─ TDH parse
-  ├─ Exporter worker (tokio)     ├─ map_event()
-  ├─ Config reload watcher       └─ sender.send(event)
-  └─ Health HTTP server                │
-                                       ▼
-                              ShardedPipeline::ingest_event()
-                                │
-                                ├─ lock(shared_process_cache)
-                                ├─ lock(shared_enrichment)  ← parking_lot::Mutex
-                                ├─ build_tokens()
-                                ├─ pick_shard(hash)
-                                └─ lock(shards[idx])        ← Mutex per shard
-                                     │
-                                     ▼
-                              BaseliningPipeline::ingest()
+```mermaid
+flowchart LR
+    subgraph main ["Main Thread"]
+        A["Agent::run()"]
+        A1["ETW session start"]
+        A2["Exporter worker (tokio)"]
+        A3["Config reload watcher"]
+        A4["Health HTTP server"]
+    end
+
+    subgraph callback ["ETW Callback Thread"]
+        B["ProcessTrace() callback"]
+        B1["TDH parse"]
+        B2["map_event()"]
+        B3["sender.send(event)"]
+    end
+
+    subgraph pipeline ["ShardedPipeline"]
+        C["ingest_event()"]
+        C1["lock(shared_process_cache)"]
+        C2["lock(shared_enrichment)<br/>← parking_lot::Mutex"]
+        C3["build_tokens()"]
+        C4["pick_shard(hash)"]
+        C5["lock(shards[idx])<br/>← Mutex per shard"]
+        D["BaseliningPipeline::ingest()"]
+    end
+
+    B3 --> C
+    C --> C1 --> C2 --> C3 --> C4 --> C5 --> D
 ```
 
 **Key design decisions:**
@@ -224,27 +184,19 @@ Agent::run()                   ProcessTrace() callback
 
 ## Security Model
 
-```
-Machine Boot
-      │
-      ▼
-  Generate master_key (256-bit random)
-      │
-      ▼
-  DPAPI::Protect(LocalMachine, master_key)
-      │
-      ▼
-  Write to state_dir/master_key.bin
-      │
-      ▼
-  Derive purpose keys:
-    HKDF-SHA256(master_key, salt="outbox",   info="agent.db") → outbox_key
-    HKDF-SHA256(master_key, salt="patterns", info="agent.db") → patterns_key
-    ...
-      │
-      ▼
-  Encrypt sensitive fields before DB write:
-    AES-256-GCM(purpose_key, nonce, plaintext) → (ciphertext, tag)
+```mermaid
+flowchart TD
+    A["Machine Boot"] --> B["Generate master_key<br/>(256-bit random)"]
+    B --> C["DPAPI::Protect<br/>(LocalMachine, master_key)"]
+    C --> D["Write to state_dir/<br/>master_key.bin"]
+    D --> E["Derive purpose keys:"]
+    E --> F1["HKDF-SHA256(master_key,<br/>salt='outbox', info='agent.db')<br/>→ outbox_key"]
+    E --> F2["HKDF-SHA256(master_key,<br/>salt='patterns', info='agent.db')<br/>→ patterns_key"]
+    E --> F3["..."]
+    F1 --> G["Encrypt sensitive fields<br/>before DB write:"]
+    F2 --> G
+    F3 --> G
+    G --> H["AES-256-GCM(purpose_key, nonce, plaintext)<br/>→ (ciphertext, tag)"]
 ```
 
 On subsequent starts, the master key is decrypted from DPAPI and purpose keys are re-derived.

@@ -47,7 +47,7 @@
     Installs from a local release zip without any prompts.
 
 .EXAMPLE
-    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1").Content
+    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1").Content
     One-liner from GitHub (run from your project directory).
 #>
 
@@ -59,8 +59,8 @@ param(
     [string]$FromZip = "",
     [switch]$Accept,
     [switch]$NoVenv,
-    [string]$Branch = "master",
-    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH.git",
+    [string]$Branch = "main",
+    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH/LessToil",
     [switch]$Help
 )
 
@@ -99,7 +99,7 @@ Options:
 Source priority: -FromZip > local clone > GitHub
 
 One-liner from GitHub:
-  irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
+  irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
 "@ | Write-Host
     exit 0
 }
@@ -110,119 +110,52 @@ if (-not $PluginOnly -and -not (Test-Path $ProjectDir)) {
     exit 1
 }
 
-# --- Dependency check -----------------------------------------------------------
-# Detect package manager
-$PKG_MANAGER = $null
-if (Get-Command winget -ErrorAction SilentlyContinue) { $PKG_MANAGER = "winget" }
-elseif (Get-Command choco -ErrorAction SilentlyContinue) { $PKG_MANAGER = "choco" }
-
-function Test-Dependency($Cmd, $MinVersion) {
-    param([string]$Cmd, [string]$MinVersion)
-    try {
-        $ver = & $Cmd --version 2>&1 | Out-String
-        if ($MinVersion -and ($ver -match "(\d+\.\d+)")) {
-            return ([version]$Matches[1] -ge [version]$MinVersion)
-        }
-        return ($LASTEXITCODE -eq 0) -or ($ver -notmatch "not recognized|not found")
-    } catch { return $false }
-}
-
-# Check dependencies
-$MISSING_DEPS = @()
-$MISSING_INSTALL = @()
-
-# Python 3.8+
+# --- Detect Python -------------------------------------------------------------
 $PYTHON = $null
 foreach ($candidate in @("python3", "python")) {
     try {
         $ver = & $candidate --version 2>&1
         if ($ver -match "Python 3\.(\d+)") {
-            if ([int]$Matches[1] -ge 8) {
+            $minor = [int]$Matches[1]
+            if ($minor -ge 8) {
                 $PYTHON = $candidate
                 break
             }
         }
     } catch { }
 }
+
 if (-not $PYTHON) {
-    $MISSING_DEPS += "Python 3.8+"
-    $MISSING_INSTALL += @{Label="Python 3.8+"; Winget="Python.Python.3.12"; Choco="python"}
-}
-
-# git
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    $MISSING_DEPS += "Git"
-    $MISSING_INSTALL += @{Label="Git"; Winget="Git.Git"; Choco="git"}
-}
-
-# Handle missing dependencies
-if ($MISSING_DEPS.Count -gt 0) {
-    Write-Host ""
-    Write-Host "The following dependencies are missing:" -ForegroundColor Yellow
-    foreach ($dep in $MISSING_DEPS) {
-        Write-Host "  - $dep" -ForegroundColor Yellow
-    }
-    Write-Host ""
-
-    if (-not $PKG_MANAGER) {
-        Write-Host "No supported package manager detected (winget or choco)." -ForegroundColor Red
-        Write-Host "Install the missing dependencies manually and re-run." -ForegroundColor Red
-        exit 1
-    }
-
     if ($Accept) {
-        Write-Host "-Accept: auto-installing missing dependencies with $PKG_MANAGER..." -ForegroundColor Yellow
-        foreach ($entry in $MISSING_INSTALL) {
-            $pkg = if ($PKG_MANAGER -eq "winget") { $entry.Winget } else { $entry.Choco }
-            Write-Detail "Installing $($entry.Label) ($pkg)..."
+        Write-Host "Python 3.8+ not found. -Accept: attempting auto-install..." -ForegroundColor Yellow
+        $installed = $false
+        try {
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Detail "Detected winget — installing Python 3..."
+                winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+                $installed = $true
+            }
+        } catch { }
+        if (-not $installed) {
             try {
-                if ($PKG_MANAGER -eq "winget") {
-                    winget install $pkg --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-                } else {
-                    choco install $pkg -y 2>&1 | Out-Null
+                if (Get-Command choco -ErrorAction SilentlyContinue) {
+                    Write-Detail "Detected Chocolatey — installing Python 3..."
+                    choco install python -y 2>&1 | Out-Null
+                    $installed = $true
                 }
-            } catch {
-                Write-Warn "Failed to install $pkg — continuing anyway."
-            }
+            } catch { }
         }
-    } else {
-        $installCmds = foreach ($entry in $MISSING_INSTALL) {
-            if ($PKG_MANAGER -eq "winget") { "winget install $($entry.Winget)" }
-            else { "choco install $($entry.Choco) -y" }
+        if (-not $installed) {
+            Write-Detail "No package manager found (winget/choco). Install Python manually from https://python.org"
+            Write-Detail "Then re-run this installer."
         }
-        Write-Host "Install them now using $PKG_MANAGER? [Y/n]" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "  $($installCmds -join '; ')" -ForegroundColor Gray
-        Write-Host ""
-        $reply = Read-Host
-        if ($reply -eq '' -or $reply -match '^[Yy]') {
-            foreach ($entry in $MISSING_INSTALL) {
-                $pkg = if ($PKG_MANAGER -eq "winget") { $entry.Winget } else { $entry.Choco }
-                Write-Detail "Installing $($entry.Label) ($pkg)..."
-                try {
-                    if ($PKG_MANAGER -eq "winget") {
-                        winget install $pkg --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-                    } else {
-                        choco install $pkg -y 2>&1 | Out-Null
-                    }
-                } catch {
-                    Write-Warn "Failed to install $pkg — continuing anyway."
-                }
-            }
-        } else {
-            Write-Err "Dependencies required. Re-run with -Accept for non-interactive install,"
-            Write-Err "or install manually and try again."
-            exit 1
-        }
-    }
-
-    # Re-detect Python after install
-    if (-not $PYTHON) {
+        # Re-detect
         foreach ($candidate in @("python3", "python")) {
             try {
                 $ver = & $candidate --version 2>&1
                 if ($ver -match "Python 3\.(\d+)") {
-                    if ([int]$Matches[1] -ge 8) {
+                    $minor = [int]$Matches[1]
+                    if ($minor -ge 8) {
                         $PYTHON = $candidate
                         break
                     }
@@ -230,14 +163,11 @@ if ($MISSING_DEPS.Count -gt 0) {
             } catch { }
         }
     }
-    Write-Host ""
-}
-
-# Final Python check
-if (-not $PYTHON) {
-    Write-Err "Python 3.8+ required but was not installed successfully."
-    Write-Err "Install from https://python.org and re-run."
-    exit 1
+    if (-not $PYTHON) {
+        Write-Err "Python 3.8+ required but not found. Install from https://python.org and ensure it is on your PATH."
+        Write-Err "Or re-run with -Accept to attempt automatic installation."
+        exit 1
+    }
 }
 
 $pyVer = & $PYTHON --version 2>&1
@@ -265,15 +195,7 @@ if (-not $NoVenv) {
         # Locate venv python
         $venvPythonPath = Join-Path $VENV_DIR "Scripts\python.exe"
         if (Test-Path $venvPythonPath) {
-            # Bootstrap pip if missing then upgrade
-            try {
-                & $venvPythonPath -m pip --version 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) {
-                    & $venvPythonPath -m ensurepip --upgrade 2>&1 | Out-Null
-                }
-            } catch {
-                & $venvPythonPath -m ensurepip --upgrade 2>&1 | Out-Null
-            }
+            # Upgrade pip inside the venv
             & $venvPythonPath -m pip install --quiet --upgrade pip 2>&1 | Out-Null
             $INSTALL_PYTHON = $venvPythonPath
             Write-Detail "Venv ready: $INSTALL_PYTHON"
@@ -363,40 +285,40 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
 
     if ($GIT) {
         Write-Detail "Cloning plugin from $RepoUrl (branch: $Branch)..."
+        Write-Detail "Using sparse checkout for plugins/repo-cognition/"
 
         # Clean up any previous temp clone
         if (Test-Path $TEMP_CLONE) { Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue }
 
-        # Full shallow clone (reliable across all git versions)
-        git clone --depth 1 "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
+        # Sparse checkout: only fetch the plugin directory
+        git clone --depth 1 --filter=blob:none --sparse "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Err "Failed to clone repository. Check your internet connection and GitHub access."
-            exit 1
+            # Fallback: full shallow clone (older git)
+            Write-Detail "Sparse checkout failed, trying full shallow clone..."
+            Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue
+            git clone --depth 1 "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "Failed to clone repository. Check your internet connection and GitHub access."
+                exit 1
+            }
+        } else {
+            Push-Location $TEMP_CLONE
+            git sparse-checkout set "plugins/repo-cognition" 2>&1 | Out-Null
+            Pop-Location
         }
 
-        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "LessToil\plugin"
+        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "plugins\repo-cognition"
     } else {
-        Write-Err "git is required but not available. Re-run with -Accept for auto-install."
+        Write-Err "git not found on PATH. The installer requires git to fetch the plugin from GitHub."
+        Write-Err ""
+        Write-Err "Install git from https://git-scm.com/download/win or run this script from"
+        Write-Err "a local clone of the repository."
         exit 1
     }
 }
 
-# After GitHub clone, extract repo-cognition.zip if manifest.py isn't present yet
-if ((-not $LOCAL_PLUGIN_SRC -or -not (Test-Path (Join-Path $LOCAL_PLUGIN_SRC "core\manifest.py"))) -and $LOCAL_PLUGIN_SRC) {
-    $zipPath = Join-Path $LOCAL_PLUGIN_SRC "repo-cognition.zip"
-    if (Test-Path $zipPath) {
-        $ZIP_TEMP = Join-Path ([System.IO.Path]::GetTempPath()) "repo-cognition-$PID"
-        if (Test-Path $ZIP_TEMP) { Remove-Item -Recurse -Force $ZIP_TEMP -ErrorAction SilentlyContinue }
-        Write-Detail "Extracting plugin from repo-cognition.zip..."
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $ZIP_TEMP)
-        $LOCAL_PLUGIN_SRC = $ZIP_TEMP
-        Write-Detail "Extracted to: $ZIP_TEMP"
-    }
-}
-
 if (-not $LOCAL_PLUGIN_SRC -or -not (Test-Path (Join-Path $LOCAL_PLUGIN_SRC "core\manifest.py"))) {
-    Write-Err "Plugin source not found. Ensure core/manifest.py exists in the source."
+    Write-Err "Plugin source not found at: $LOCAL_PLUGIN_SRC"
     exit 1
 }
 
@@ -434,18 +356,16 @@ Copy-PluginDir "install scripts"    $null               "."
 
 Write-Host ""
 
-# Rewrite hooks.json to use venv python (if venv is active)
-if ($VENV_DIR) {
-    $hooksJsonPath = Join-Path $PLUGIN_DIR "hooks\hooks.json"
-    if (Test-Path $hooksJsonPath) {
-        $venvPythonExe = Join-Path $VENV_DIR "Scripts\python.exe"
-        if (Test-Path $venvPythonExe) {
-            $hooksContent = Get-Content $hooksJsonPath -Raw -Encoding UTF8
-            $hooksContent = $hooksContent -replace '"python "', '"' + $venvPythonExe + ' "'
-            Set-Content -Path $hooksJsonPath -Value $hooksContent -Encoding UTF8 -NoNewline
-            Write-Detail "hooks.json: using $venvPythonExe"
-        }
-    }
+# Rewrite hooks.json to use the resolved Python path (venv or system).
+# Prevents "python: command not found" on systems where the command name differs.
+$hooksJsonPath = Join-Path $PLUGIN_DIR "hooks\hooks.json"
+if (Test-Path $hooksJsonPath) {
+    $pythonAbs = (Get-Command $INSTALL_PYTHON -ErrorAction SilentlyContinue).Source
+    if (-not $pythonAbs) { $pythonAbs = $INSTALL_PYTHON }
+    $hooksContent = Get-Content $hooksJsonPath -Raw -Encoding UTF8
+    $hooksContent = $hooksContent -replace '"python "', '"' + $pythonAbs + ' "'
+    Set-Content -Path $hooksJsonPath -Value $hooksContent -Encoding UTF8 -NoNewline
+    Write-Detail "hooks.json: using $pythonAbs"
 }
 
 # ==============================================================================

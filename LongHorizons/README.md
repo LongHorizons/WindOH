@@ -24,15 +24,18 @@ The LongHorizons Telemetry Agent transforms raw Windows event data into a querya
 
 ## What It Does
 
-```
- Windows ETW                   SQLite                    Elasticsearch
-┌──────────────┐   ┌──────────────────────────┐   ┌───────────────────┐
-│ 47 Providers │──▶│ Normalize → Enrich →     │──▶│ longhorizons-     │
-│ Kernel+User  │   │ Tokenize → Baseline →    │   │ events            │
-│ Real-time    │   │ Reservoir → Outbox       │   │ exemplars         │
-└──────────────┘   └──────────────────────────┘   │ patterns          │
-                                                   │ diagnostics       │
-                                                   └───────────────────┘
+```mermaid
+flowchart LR
+    subgraph etw ["Windows ETW"]
+        A["47 Providers<br/>Kernel+User<br/>Real-time"]
+    end
+    subgraph agent ["SQLite"]
+        B["Normalize → Enrich →<br/>Tokenize → Baseline →<br/>Reservoir → Outbox"]
+    end
+    subgraph es ["Elasticsearch"]
+        C["longhorizons-events<br/>longhorizons-exemplars<br/>longhorizons-patterns<br/>longhorizons-diagnostics"]
+    end
+    A --> B --> C
 ```
 
 - **Collects** from 47 ETW providers (kernel process/thread/network/file/registry, DNS, PowerShell, Defender, Schannel, RPC, WMI, Hyper-V, storage, and more)
@@ -253,33 +256,21 @@ The agent doesn't just ship events — it ships a pre-computed baseline across f
 
 ### The Four Indexes as a Baselining Stack
 
-```
-                        ┌────────────────────────────────────────┐
-                        │        longhorizons-diagnostics        │  ← Is the pipeline healthy?
-                        │  Agent uptime, ETW restarts, dropped   │
-                        │  events, shard backpressure, disk free  │
-                        └────────────────────────────────────────┘
-                                          │
-                        ┌────────────────────────────────────────┐
-                        │        longhorizons-patterns           │  ← What's trending across the fleet?
-                        │  Aggregated frequency per behavior,    │
-                        │  cross-host prevalence, drop counts,   │
-                        │  rarity band transitions over time      │
-                        └────────────────────────────────────────┘
-                                          │
-                        ┌────────────────────────────────────────┐
-                        │        longhorizons-exemplars          │  ← What does this behavior look like?
-                        │  One representative event per unique   │
-                        │  stable_hash, with full payload detail, │
-                        │  reason for sampling, rarity at capture │
-                        └────────────────────────────────────────┘
-                                          │
-                        ┌────────────────────────────────────────┐
-                        │        longhorizons-events             │  ← What's happening right now?
-                        │  Every event with pre-computed rarity, │
-                        │  decay score, behavioral tags, timing, │
-                        │  lineage — the full enrichment payload  │
-                        └────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph diag ["longhorizons-diagnostics"]
+        D["Is the pipeline healthy?<br/>Agent uptime, ETW restarts,<br/>dropped events, shard<br/>backpressure, disk free"]
+    end
+    subgraph pat ["longhorizons-patterns"]
+        P["What's trending across the fleet?<br/>Aggregated frequency per behavior,<br/>cross-host prevalence, drop counts,<br/>rarity band transitions over time"]
+    end
+    subgraph exe ["longhorizons-exemplars"]
+        E["What does this behavior look like?<br/>One representative event per unique<br/>stable_hash, with full payload detail,<br/>reason for sampling, rarity at capture"]
+    end
+    subgraph evt ["longhorizons-events"]
+        V["What's happening right now?<br/>Every event with pre-computed rarity,<br/>decay score, behavioral tags, timing,<br/>lineage — the full enrichment payload"]
+    end
+    diag --> pat --> exe --> evt
 ```
 
 ### What Each Index Tells You
