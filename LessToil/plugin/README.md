@@ -184,4 +184,4 @@ Everything runs locally. SQLite database and all index files stored in `.claude/
 
 ## License
 
-MIT
+[LongHorizons Software License v1.0](../../LICENSE) — free for personal, research, and educational use. Commercial use requires a separate license.

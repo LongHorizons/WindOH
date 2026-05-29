@@ -46,7 +46,7 @@ No. LessToil is specifically designed to augment Claude Code's reasoning within 
 
 ### What license is this under?
 
-MIT. The plugin is open source and lives at `LessToil/plugin/` within the [LongHorizons/WindOH](https://github.com/LongHorizons/WindOH) monorepo.
+[LongHorizons Software License v1.0](../LICENSE) — source-available. Free for personal, research, and educational use. Commercial use, revenue-generating deployment, and use within for-profit entities require a separate commercial license. The plugin lives at `LessToil/plugin/` within the [LongHorizons/WindOH](https://github.com/LongHorizons/WindOH) monorepo.
 
 ---
 
@@ -299,7 +299,7 @@ The plugin is designed so that no single module failure can prevent Claude Code 
 - Local — everything runs on your machine
 - Structure-focused — call graphs, dependency graphs, architectural domains
 - Queryable — full SQL access to the index (26 tables)
-- Open — MIT licensed, extensible, 40 Python modules you can modify
+- Open — source-available (LongHorizons Software License v1.0), extensible, 40 Python modules you can modify
 
 The two approaches are complementary. Embeddings excel at "find code semantically similar to this." Graphs excel at "who calls this" and "what is the impact of changing this." LessToil focuses on the latter.
 

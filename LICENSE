@@ -1,0 +1,286 @@
+LongHorizons Software License v1.0
+Copyright (c) 2024-2026 LongHorizons. All rights reserved.
+
+───────────────────────────────────────────────────────────────────────────────
+READ CAREFULLY — THIS LICENSE RESTRICTS YOUR RIGHTS
+───────────────────────────────────────────────────────────────────────────────
+
+This License governs the use, reproduction, and distribution of the software
+and associated documentation files (the "Software") made available at
+https://github.com/LongHorizons/WindOH and its subdirectories.
+
+By downloading, accessing, copying, installing, or otherwise using the
+Software, you acknowledge that you have read this License, understand it,
+and agree to be bound by its terms. If you do not agree, do not use the
+Software.
+
+───────────────────────────────────────────────────────────────────────────────
+1. GRANT OF RIGHTS
+───────────────────────────────────────────────────────────────────────────────
+
+1.1. PERSONAL, RESEARCH, AND EDUCATIONAL USE
+
+Permission is granted, free of charge, to any person obtaining a copy of the
+Software to use, reproduce, modify, merge, publish, distribute, and sublicense
+copies of the Software, in source or binary form, solely for the following
+purposes ("Permitted Purposes"):
+
+   (a) Personal, non-commercial use — use on personally owned systems for
+       individual productivity, learning, or hobby projects that do not
+       generate revenue, directly or indirectly.
+
+   (b) Academic research — use at an accredited educational institution or
+       non-profit research organization for non-commercial research,
+       teaching, or scholarly publication, including the right to publish
+       and distribute the Software as part of a research artifact, provided
+       that the research is not funded, sponsored, or commissioned by a
+       commercial entity that obtains a competitive or financial benefit
+       from the research outcomes.
+
+   (c) Educational study — individual study, reverse engineering for
+       interoperability, code review, and analysis for the purpose of
+       learning, skill development, or public knowledge.
+
+   (d) Evaluation — internal evaluation and prototyping to assess the
+       Software's suitability for a use case, for a period not exceeding
+       90 calendar days. Evaluation does not include production deployment
+       or use in any revenue-generating context.
+
+1.2. COMMERCIAL AND REVENUE-GENERATING USE
+
+Any use of the Software, in whole or in part, that generates revenue,
+supports a revenue-generating product or service, provides a competitive
+advantage to a for-profit entity, or is deployed in a commercial environment
+is expressly PROHIBITED without a separate commercial license agreement
+signed by LongHorizons ("Commercial License").
+
+For purposes of this License, "commercial use" includes, but is not limited
+to:
+
+   (a) Use by a for-profit corporation, LLC, partnership, sole
+       proprietorship, or any entity that files taxes as a business.
+
+   (b) Use in any product or service that is sold, licensed, rented,
+       leased, or otherwise provided for a fee or other consideration.
+
+   (c) Use in any software-as-a-service (SaaS), platform-as-a-service
+       (PaaS), managed service, consulting engagement, or contract work
+       where the Software contributes to the deliverables.
+
+   (d) Use by government agencies, military, or law enforcement outside
+       of purely academic research contexts.
+
+   (e) Use that generates advertising revenue, collects user data for
+       monetization, or otherwise derives indirect financial benefit.
+
+   (f) Redistribution as part of a product that is itself sold or licensed
+       for a fee, even if the Software is provided at no additional charge.
+
+To inquire about a Commercial License, contact the copyright holder.
+
+───────────────────────────────────────────────────────────────────────────────
+2. CONDITIONS FOR ALL USES
+───────────────────────────────────────────────────────────────────────────────
+
+2.1. Attribution
+
+All copies, distributions, and substantial portions of the Software must
+retain:
+
+   (a) The above copyright notice.
+   (b) This License document in its entirety.
+   (c) The following notice prominently displayed in any user interface,
+       documentation, and wherever third-party notices appear:
+
+       "This product includes software developed by LongHorizons
+       (https://github.com/LongHorizons)."
+
+   (d) Any NOTICE, AUTHORS, or CONTRIBUTORS files distributed with the
+       Software.
+
+2.2. Modifications
+
+You may create modifications of the Software ("Derivative Works") for
+Permitted Purposes. All Derivative Works:
+
+   (a) Must be clearly marked as modified, with a description of the
+       changes and the date of modification.
+
+   (b) Are automatically licensed under this same License. You may not
+       re-license Derivative Works under different terms.
+
+   (c) Must retain all copyright, patent, trademark, and attribution
+       notices from the original Software.
+
+2.3. No Trademark Grant
+
+This License does not grant permission to use the trade names, trademarks,
+service marks, or product names of LongHorizons, except as required for
+reasonable and customary attribution under Section 2.1.
+
+───────────────────────────────────────────────────────────────────────────────
+3. RESTRICTIONS
+───────────────────────────────────────────────────────────────────────────────
+
+3.1. No Commercial Exploitation Without Consent
+
+You may not, without a separate signed Commercial License:
+
+   (a) Charge a fee for the Software or any Derivative Work.
+   (b) Bundle the Software with a commercial product or service.
+   (c) Use the Software to provide a service that competes with any
+       product or service offered by LongHorizons.
+   (d) Sublicense the Software under terms that permit commercial use
+       by downstream recipients.
+
+3.2. No Patent Litigation
+
+If you institute patent litigation against any entity (including a
+cross-claim or counterclaim in a lawsuit) alleging that the Software or
+any contribution incorporated within the Software constitutes direct or
+contributory patent infringement, then the rights granted to you under
+this License shall terminate automatically as of the date such litigation
+is filed.
+
+3.3. No Malicious Use
+
+You may not use the Software:
+
+   (a) In any system or application that is designed, intended, or used
+       for the purpose of causing harm, injury, death, or damage to
+       persons or property.
+   (b) In violation of any applicable law or regulation, including
+       export control laws.
+   (c) To develop, test, or deploy malware, ransomware, spyware, or any
+       software intended to compromise, damage, or gain unauthorized
+       access to computer systems.
+
+───────────────────────────────────────────────────────────────────────────────
+4. TERMINATION
+───────────────────────────────────────────────────────────────────────────────
+
+4.1. Automatic Termination
+
+This License and the rights granted hereunder terminate automatically if:
+
+   (a) You breach any term of this License.
+   (b) You exceed the scope of Permitted Purposes without obtaining a
+       Commercial License.
+   (c) You initiate patent litigation as described in Section 3.2.
+
+4.2. Effect of Termination
+
+Upon termination, you must:
+
+   (a) Cease all use of the Software.
+   (b) Destroy all copies of the Software in your possession or control.
+   (c) Cease distribution of any Derivative Works.
+   (d) Certify in writing, upon request, that you have complied with
+       (a)-(c).
+
+4.3. Survival
+
+Sections 5 (Disclaimer of Warranty), 6 (Limitation of Liability), 7
+(Governing Law), and this Section 4.3 survive termination.
+
+───────────────────────────────────────────────────────────────────────────────
+5. DISCLAIMER OF WARRANTY
+───────────────────────────────────────────────────────────────────────────────
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE ENTIRE
+RISK AS TO THE QUALITY, ACCURACY, AND PERFORMANCE OF THE SOFTWARE IS WITH
+YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL
+NECESSARY SERVICING, REPAIR, OR CORRECTION.
+
+THE COPYRIGHT HOLDER DOES NOT WARRANT THAT THE SOFTWARE WILL MEET YOUR
+REQUIREMENTS, THAT OPERATION WILL BE UNINTERRUPTED OR ERROR-FREE, OR THAT
+DEFECTS WILL BE CORRECTED. NO ORAL OR WRITTEN ADVICE PROVIDED BY THE
+COPYRIGHT HOLDER OR ANY CONTRIBUTOR SHALL CREATE ANY WARRANTY.
+
+SOME JURISDICTIONS DO NOT ALLOW THE EXCLUSION OF IMPLIED WARRANTIES, SO
+THE ABOVE EXCLUSION MAY NOT APPLY TO YOU. IN SUCH CASE, ANY IMPLIED
+WARRANTIES ARE LIMITED TO THE MINIMUM PERIOD AND EXTENT PERMITTED BY
+APPLICABLE LAW.
+
+───────────────────────────────────────────────────────────────────────────────
+6. LIMITATION OF LIABILITY
+───────────────────────────────────────────────────────────────────────────────
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER, CONTRIBUTORS, OR ANY PERSON WHO
+DISTRIBUTES THE SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+OR PROFITS; LOSS OF GOODWILL; BUSINESS INTERRUPTION; OR PERSONAL INJURY OR
+DEATH) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF OR INABILITY TO USE THE SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+YOU ACKNOWLEDGE THAT THE SOFTWARE IS NOT DESIGNED, MANUFACTURED, OR
+INTENDED FOR USE IN HIGH-RISK ACTIVITIES, INCLUDING BUT NOT LIMITED TO
+THE OPERATION OF NUCLEAR FACILITIES, AIRCRAFT NAVIGATION OR COMMUNICATION
+SYSTEMS, AIR TRAFFIC CONTROL, DIRECT LIFE SUPPORT MACHINES, WEAPONS
+SYSTEMS, OR ANY APPLICATION WHERE FAILURE COULD REASONABLY BE EXPECTED
+TO RESULT IN DEATH, PERSONAL INJURY, CATASTROPHIC PROPERTY DAMAGE, OR
+SEVERE ENVIRONMENTAL DAMAGE.
+
+SOME JURISDICTIONS DO NOT ALLOW THE EXCLUSION OR LIMITATION OF LIABILITY
+FOR INCIDENTAL OR CONSEQUENTIAL DAMAGES, SO THE ABOVE LIMITATIONS MAY NOT
+APPLY TO YOU.
+
+───────────────────────────────────────────────────────────────────────────────
+7. GOVERNING LAW AND DISPUTE RESOLUTION
+───────────────────────────────────────────────────────────────────────────────
+
+This License shall be governed by and construed in accordance with the laws
+of the United States and the State of Delaware, without regard to conflict
+of law principles. Any dispute arising out of or relating to this License
+shall be brought exclusively in the federal or state courts located in
+Delaware, and you consent to personal jurisdiction in those courts.
+
+───────────────────────────────────────────────────────────────────────────────
+8. GENERAL PROVISIONS
+───────────────────────────────────────────────────────────────────────────────
+
+8.1. Severability
+
+If any provision of this License is held to be unenforceable, such
+provision shall be reformed only to the extent necessary to make it
+enforceable, and the remaining provisions shall remain in full force
+and effect.
+
+8.2. No Waiver
+
+The failure of the copyright holder to enforce any provision of this
+License shall not constitute a waiver of the right to enforce such
+provision in the future.
+
+8.3. Entire Agreement
+
+This License constitutes the entire agreement between you and the
+copyright holder concerning the Software and supersedes all prior
+agreements and understandings.
+
+8.4. Amendments
+
+The copyright holder may publish revised versions of this License from
+time to time. Each version will be given a distinguishing version number.
+You may use the Software under the terms of the version under which it
+was originally distributed, or under the terms of any subsequent version
+published by the copyright holder.
+
+8.5. Third-Party Components
+
+The Software may include components licensed under separate open-source
+licenses. Those components remain governed by their respective licenses,
+which are not modified by this License. A list of such components and
+their licenses, where applicable, is maintained in NOTICE.md.
+
+───────────────────────────────────────────────────────────────────────────────
+CONTACT
+───────────────────────────────────────────────────────────────────────────────
+
+For Commercial License inquiries, contributions, or questions:
+  https://github.com/LongHorizons/WindOH

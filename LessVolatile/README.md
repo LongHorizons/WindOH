@@ -308,7 +308,7 @@ The plugin is marked ✗ in the TUI, error output is saved to `debug/`, and proc
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[LongHorizons Software License v1.0](../LICENSE) — free for personal, research, and educational use. Commercial use requires a separate license.
 
 ---
 

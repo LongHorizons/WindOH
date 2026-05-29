@@ -475,9 +475,13 @@ WindOH was designed, architected, and built by a single engineer as an integrate
 
 ---
 
+## License
+
+This software is provided under the [LongHorizons Software License v1.0](LICENSE) — a source-available, protective license that permits personal, research, and educational use at no cost. Commercial use, revenue-generating deployment, and use within for-profit entities require a separate commercial license. See the [LICENSE](LICENSE) file for full terms.
+
 ## Disclaimer
 
-These tools are provided as-is, without warranty of any kind, express or implied. No license is granted. All rights reserved.
+These tools are provided as-is, without warranty of any kind, express or implied.
 
 These are security tools — they interact with the Windows kernel, capture forensic artifacts, execute code on remote systems, and process sensitive telemetry. Use of these tools may carry operational, legal, and compliance risk. You are solely responsible for:
 

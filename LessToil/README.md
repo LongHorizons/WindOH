@@ -372,4 +372,4 @@ All indexing happens **locally** on your machine. The SQLite database, JSON mani
 
 ## License
 
-MIT
+[LongHorizons Software License v1.0](../LICENSE) — free for personal, research, and educational use. Commercial use requires a separate license.
