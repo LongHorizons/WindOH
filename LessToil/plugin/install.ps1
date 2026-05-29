@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    LessToil Plugin — PowerShell Installer for Windows
+    LessToil Plugin -- PowerShell Installer for Windows
 .DESCRIPTION
     Installs the repo-cognition plugin to ~/.claude/plugins/repo-cognition/
     by fetching the plugin from GitHub and setting up the target project.
@@ -114,7 +114,7 @@ if (-not $PluginOnly -and -not (Test-Path $ProjectDir)) {
 if (-not $Accept) {
     Write-Host ""
     Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host "  LessToil Plugin v0.4.0 — Installer" -ForegroundColor Cyan
+    Write-Host "  LessToil Plugin v0.4.0 -- Installer" -ForegroundColor Cyan
     Write-Host "==============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  This will:" -ForegroundColor White
@@ -182,7 +182,7 @@ function Install-PythonAuto {
     $installed = $false
     try {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Detail "Detected winget — installing Python 3..."
+            Write-Detail "Detected winget -- installing Python 3..."
             winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
             $installed = $true
         }
@@ -190,7 +190,7 @@ function Install-PythonAuto {
     if (-not $installed) {
         try {
             if (Get-Command choco -ErrorAction SilentlyContinue) {
-                Write-Detail "Detected Chocolatey — installing Python 3..."
+                Write-Detail "Detected Chocolatey -- installing Python 3..."
                 choco install python -y 2>&1 | Out-Null
                 $installed = $true
             }
@@ -246,7 +246,7 @@ if (-not $NoVenv) {
                 throw "venv creation failed"
             }
         } catch {
-            Write-Warn "venv creation failed — falling back to system Python."
+            Write-Warn "venv creation failed -- falling back to system Python."
             Write-Warn "You may need to install the Python venv module."
             $NoVenv = $true
         }
@@ -260,7 +260,7 @@ if (-not $NoVenv) {
             $INSTALL_PYTHON = $venvPythonPath
             Write-Detail "Venv ready: $INSTALL_PYTHON"
         } else {
-            Write-Warn "venv python not found — falling back to system Python."
+            Write-Warn "venv python not found -- falling back to system Python."
             $NoVenv = $true
         }
     }
@@ -272,7 +272,7 @@ if ($NoVenv) {
 
 Write-Host ""
 Write-Header
-Write-Host "  LessToil Plugin v0.4.0 — Installer" -ForegroundColor Cyan
+Write-Host "  LessToil Plugin v0.4.0 -- Installer" -ForegroundColor Cyan
 Write-Header
 Write-Host "  Python:   $INSTALL_PYTHON ($(& $INSTALL_PYTHON --version 2>&1))"
 if ($VENV_DIR) {
