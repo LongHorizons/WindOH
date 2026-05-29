@@ -6,6 +6,91 @@
 
 ---
 
+## The WindOH Manifesto
+
+### What This Is
+
+WindOH is a Windows security intelligence platform. It is not a SIEM, not an EDR, and not a dashboard factory. It is a system for answering one question with cryptographic certainty: **what just happened, and have we ever seen it before?**
+
+Three components answer this question at different altitudes:
+
+| Component | Role | Scale |
+|---|---|---|
+| **LongHorizons Agent** | Rust binary (~8 MB). Captures real-time ETW from 200+ kernel and user-mode providers. Decomposes every event into a stable token (the WHAT — a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO — the instance-specific details). Baselined, rarity-scored, exported. Runs as a Windows service. No runtime dependencies. | One per endpoint |
+| **WindOH Application** | TypeScript/Next.js web app. Polls Elasticsearch for new tokens, enriches each unique payload token via a local LLM, caches enrichment permanently in MongoDB, builds Markov transition matrices from temporal event sequences, maps Atomic Red Team executions against captured telemetry. | One per fleet |
+| **LessVolatile + OneDriveStandaloneUpdaterr** | Memory forensics at scale. 68 Volatility plugins run in parallel with fingerprint-based deduplication across cases. Covert forensic triage via KAPE, PsExec, and EZ Tools. | On-demand |
+
+### The Problem It Solves
+
+Security operations is fundamentally constrained by a category error: **treating behavioral identity as a function of timestamp, PID, and process name, when it should be a function of the behavioral skeleton itself.**
+
+Every time `svchost.exe` makes a DNS query, a new event floods the SIEM — indistinguishable from the last thousand identical queries except for the timestamp. Storage costs grow linearly with fleet size. Signal-to-noise degrades at the same rate. "Have we seen this behavior before?" takes hours of manual hunting. "Is this normal?" takes weeks of baseline building that most teams never complete.
+
+WindOH fixes this at the source. Same behavior = same stable token = stored once, queried in microseconds, enriched exactly once. 90--99% reduction in stored event volume before the data reaches the SIEM.
+
+### What the Operator Experience Should Feel Like
+
+You sit down at the console. A new alert has fired. You don't know what triggered it.
+
+First question: **"Has this behavior been seen before, anywhere in the fleet?"** You query by stable token. The answer returns in under a second: *Yes. Seen 47,000 times across 892 endpoints over the past 90 days. Rarity: Common. First observed 18 months ago.*
+
+That changes everything. The alert is not novel — it's a known behavior that fired because a threshold moved. You close it and move on.
+
+Next question: **"This specific payload — these command-line arguments, this target IP — is THAT new?"** You query by payload token. *Never seen before. Enrichment triggered.* The local LLM returns a structured assessment: what the process lineage suggests, which MITRE techniques map to it, whether it looks like a LOLBin, what investigation steps to take. This enriched context is now permanently cached — every analyst who encounters this payload from this point forward gets the same intelligence, instantly, without re-running the LLM.
+
+Next question: **"Assuming this is malicious, what typically follows?"** Markov chain prediction: *After this behavior, the next behavior is usually X (probability 72%) or Y (probability 18%). This observed transition has empirical probability < 1%.* That is a sequence anomaly. Worth investigating.
+
+You spend your time on the anomalous, the rare, and the novel. The routine answers itself.
+
+### Architectural Principles That Matter
+
+These are non-negotiable. They are the decision framework for every component, every feature, and every PR.
+
+**1. Deterministic over heuristic.** Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they do not. There is no confidence score to tune, no threshold to argue about, no training distribution to drift from. This is court-admissible, SIEM-ingestible, and immune to adversarial evasion.
+
+**2. Local-first over cloud-dependent.** LLM enrichment runs against a local endpoint — llama.cpp, Ollama, vLLM. No telemetry data transits the public internet for enrichment under any configuration. The agent operates fully independently even when Elasticsearch is unreachable, buffering to a local SQLite outbox with exponential backoff retry.
+
+**3. Observable over opaque.** Every automated decision carries provenance. A rarity band includes the decay score, observation count, and half-life parameters. A Markov anomaly flag includes the transition probability and the expected next behavior. LLM enrichment stores the raw prompt and response alongside the parsed output. The analyst can always inspect the inputs that produced the output.
+
+**4. Safe-by-default.** AES-256-GCM encryption at rest is mandatory, not optional. Master keys are DPAPI-protected and tied to the service account. Purpose-specific encryption keys derived via HKDF-SHA256. Elasticsearch connections require API key authentication. No plaintext credentials in configuration files.
+
+**5. Graceful degradation.** If Elasticsearch is unreachable, the agent buffers to SQLite outbox. If the LLM is unavailable, enrichment jobs queue without data loss. If MongoDB is unavailable, the API returns 503 with structured health status. No component failure cascades into another.
+
+**6. Human-overridable.** Every automated decision — rarity band, anomaly flag, risk assessment — is an annotation, not an enforcement action. The system recommends. The analyst decides. There is no automated blocking, quarantining, or process termination.
+
+**7. Reproducible execution.** Same memory dump — same SHA-256 fingerprint for every process, service, module, and network profile. Same ETW behavior — same stable token, independent of host, time, or session. Same enrichment prompt — same cached result. Idempotency is a design constraint, not an optimization.
+
+### What Stays Local
+
+- All behavioral telemetry. Process command lines, network targets, user identities — the most sensitive data in a security environment.
+- All LLM enrichment. The prompt goes to a local endpoint. The response comes back to local storage. Nothing leaves.
+- All token generation. The stable token and payload token are computed on the endpoint. Only the hashes are exported.
+- All encryption keys. DPAPI-bound to the service account. Never transmitted, never shared.
+
+### How Agents Should Behave
+
+The LongHorizons agent is designed for environments where **being noticed is a failure mode.**
+
+- **Silent.** No GUI, no tray icon, no console window. A Windows service running under LocalSystem.
+- **Small.** Single ~8 MB binary. No runtime, no framework, no package manager.
+- **Predictable.** Configurable memory ceiling. Configurable ETW session buffer sizes. Configurable export batch sizes. No unbounded growth.
+- **Resilient.** If the export target is unreachable, buffer locally. Retry with exponential backoff. Dead-letter after N attempts. Never crash-loop. Never drop data silently.
+- **Honest.** Emit structured diagnostics about its own health — buffer depth, export latency, dropped events, memory pressure. The agent should be the most observable component in the pipeline.
+
+### What We Refuse to Compromise On
+
+- **No telemetry leaves the premises for enrichment.** Ever. This is not a configuration option — it is an architectural invariant. There is no code path that sends event data to an external service for inference.
+
+- **No automated blocking.** The platform annotates. It recommends. It does not quarantine, terminate, or suppress. False positives in security contexts interrupt legitimate operations and destroy trust in the tool.
+
+- **No black-box outputs.** Every assessment includes explicit rationale. Every score includes its inputs. Every enrichment includes the raw LLM response that produced it. The analyst can always verify.
+
+- **No silent data loss.** If a buffer fills, it is a diagnosable event. If an export fails, it is retried and tracked. If a dead-letter queue accumulates, it surfaces in the health dashboard. Data loss must be explicit and measurable.
+
+- **No cloud requirement.** The entire pipeline — agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis — operates on infrastructure you control. Internet access is only needed for external threat intelligence enrichment (SearXNG), and that is optional.
+
+---
+
 ## Architecture
 
 ### System Context (C4 Level 1)
