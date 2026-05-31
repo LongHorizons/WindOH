@@ -10,7 +10,7 @@ WindOH is a TypeScript/MongoDB web application that consumes telemetry from the 
 
 ### 1.1 Core Value Proposition
 
-The LongHorizons agent produces cryptographically stable behavioral tokens (`stable_hash` and `payload_hash`) at wire speed. But a hash alone doesn't tell an analyst *what the behavior means*. WindOH closes that gap:
+The LongHorizons agent exports events to Elasticsearch with two deterministic token fields: `tokens.stable` (the behavioral fingerprint) and `tokens.payload` (the variable details). WindOH reads these as `stable_hash` and `payload_hash` in its MongoDB schema. But a hash alone doesn't tell an analyst *what the behavior means*. WindOH closes that gap:
 
 ```
 stable_hash: a1b2c3... → "cmd.exe spawned whoami.exe from a temp directory

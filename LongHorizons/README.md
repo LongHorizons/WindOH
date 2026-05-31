@@ -20,7 +20,7 @@ flowchart LR
         SAN["Sanitization\nBOM-aware UTF-16\ngarbage detection"]
         SEM["Semantic Classification\n49 event types\nprovider-agnostic"]
         ENRICH["Enrichment\nPEB cmdline, NTSTATUS,\nDNS codes, integrity,\nparent backfill"]
-        TOK["Tokenization\nbase_hash + payload_hash\nSHA-256 deterministic"]
+        TOK["Tokenization\nstable token + payload token\nSHA-256 deterministic"]
         BASE["Baselining\nCMS frequency, decay scoring,\nreservoir sampling"]
         OUT["Outbox\nPriority queue\ndedup + retry"]
     end
@@ -61,23 +61,23 @@ flowchart TD
     end
 
     subgraph Tokens["Cryptographic Hashing"]
-        E1 --> S1["base_hash: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
-        E1 --> P1["payload_hash: d4e5f6...\n'whoami.exe at 9:05 AM'\n(unique)"]
+        E1 --> S1["stable token: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
+        E1 --> P1["payload token: d4e5f6...\n'whoami.exe at 9:05 AM'\n(unique)"]
 
-        E2 --> S2["base_hash: a1b2c3...\n(same — identical behavior)"]
-        E2 --> P2["payload_hash: g7h8i9...\n'whoami.exe at 10:22 AM'\n(unique)"]
+        E2 --> S2["stable token: a1b2c3...\n(same — identical behavior)"]
+        E2 --> P2["payload token: g7h8i9...\n'whoami.exe at 10:22 AM'\n(unique)"]
 
-        E3 --> S3["base_hash: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
-        E3 --> P3["payload_hash: m3n4o5...\n'net.exe user at 9:06 AM'\n(unique)"]
+        E3 --> S3["stable token: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
+        E3 --> P3["payload token: m3n4o5...\n'net.exe user at 9:06 AM'\n(unique)"]
     end
 
     subgraph Storage["Storage Impact"]
-        S1 --> STORE["Base token stored ONCE\nSubsequent occurrences: counter++"]
+        S1 --> STORE["Stable token stored ONCE\nSubsequent occurrences: counter++"]
         P1 --> STORE2["Payload token stored once per variant\nRare payloads → immediate exemplar export"]
     end
 ```
 
-**Base tokens** (SHA-256 of the behavioral skeleton — process lineage + operation type + normalized fields) collapse identical behaviors into the same hash. **Payload tokens** add the variable details (command lines, IPs, specific values). Same hash = same behavior = stored once.
+**Stable tokens** (`tokens.stable` in ES) are SHA-256 hashes of the behavioral skeleton — process lineage + operation type + normalized fields. Identical behaviors produce the same hash. **Payload tokens** (`tokens.payload`) add the variable details — command lines, IPs, specific values. Same stable hash = same behavior = stored once.
 
 ---
 
@@ -175,7 +175,7 @@ flowchart LR
 | **Identical events stored** | Every single one | Once + counter | — |
 | **Time to answer "is this new?"** | Hours of search | Instant (base hash lookup) | — |
 | **Time to answer "is this normal?"** | Requires manual hunting | Decay score + rarity band, precomputed | — |
-| **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic base hash | — |
+| **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic `tokens.stable` | — |
 | **Investigation surface** | Every event | Rare + uncommon events only | **95%+** |
 | **LLM enrichment ready** | No (no relational context) | Yes (timing, lineage, burst, behavior tags precomputed) | — |
 | **Data cleanliness** | Raw, unvalidated | Sanitized: no AAA=, no mojibake, no hex pointers, all codes human-readable | — |
@@ -220,18 +220,18 @@ flowchart LR
 
 **Key research properties:**
 
-- **Reproducible by construction**: `base_hash` is deterministic — two researchers observing the same behavior on different machines get the same hash. No proprietary feature extraction, no black-box embeddings. Results are independently verifiable. This is the difference between "our model detected an anomaly" and "SHA-256 `a1b2c3...` is anomalous, and any researcher can verify this."
+- **Reproducible by construction**: `tokens.stable` is deterministic — two researchers observing the same behavior on different machines get the same hash. No proprietary feature extraction, no black-box embeddings. Results are independently verifiable. This is the difference between "our model detected an anomaly" and "SHA-256 `a1b2c3...` is anomalous, and any researcher can verify this."
 - **Cross-system behavioral phylogenetics**: Track how behaviors evolve across Windows versions, patch levels, and configurations. The same hash means the same behavior, regardless of hostname, PID, or timestamp. "How did process creation patterns change from Windows 10 22H2 to Windows 11 24H2?" — answerable by comparing base hash frequency distributions.
 - **Kernel operation taxonomy**: Every NTFS file operation, every registry key touch, every network connection, every process creation — classified, counted, and rarity-scored. Build a complete behavioral map of Windows. The 49 event types provide a structured ontology for OS behavior.
 - **Longitudinal studies**: Decay-weighted baselining with 30-day half-life means frequency scores self-calibrate. "What behaviors became more common after the May 2026 patch?" — answerable in one Elasticsearch aggregation query.
-- **Zero-preprocessing ML datasets**: Pre-enriched documents with inter-event timing, process lineage, behavioral tags, burst detection, payload deviation scoring. Drop directly into LLM fine-tuning, anomaly detection models, or graph neural networks. The `base_hash` provides a natural label for behavioral clustering — no manual annotation required.
+- **Zero-preprocessing ML datasets**: Pre-enriched documents with inter-event timing, process lineage, behavioral tags, burst detection, payload deviation scoring. Drop directly into LLM fine-tuning, anomaly detection models, or graph neural networks. The `tokens.stable` hash provides a natural label for behavioral clustering — no manual annotation required.
 - **Publication-ready citation**: The cryptographic determinism means you can publish your dataset's hash distribution and other researchers can verify they're observing the same behaviors. Your appendix is a list of SHA-256 hashes, not a 500 GB `.pcap` file.
 
 ### Cross-Host Hunting — One Hash, Fleet-Wide Visibility
 
 ```mermaid
 flowchart TD
-    HUNT["Analyst discovers suspicious\nbehavior on Host A"] --> HASH["Extract base_hash\nfrom event document"]
+    HUNT["Analyst discovers suspicious\nbehavior on Host A"] --> HASH["Extract tokens.stable\nfrom event document"]
     HASH --> QUERY["Query: GET telemetry-events/_search\n{ 'term': { 'tokens.stable': '<hash>' } }"]
 
     QUERY --> H1["🖥️ Host A\nSeen 847 times\nFirst: Jan 3"]
@@ -249,7 +249,7 @@ flowchart TD
     style H2 fill:#ffd43b,color:#000
 ```
 
-The `base_hash` is cryptographically deterministic — same behavior on any host produces the same hash. One Elasticsearch query tells you **everywhere** that behavior has occurred, **how often**, and **whether this time is different**. No JOINs, no string matching, no regex.
+The stable token (`tokens.stable`) is cryptographically deterministic — same behavior on any host produces the same hash. One Elasticsearch query tells you **everywhere** that behavior has occurred, **how often**, and **whether this time is different**. No JOINs, no string matching, no regex.
 
 ### Detection Engineering
 
@@ -284,7 +284,7 @@ flowchart LR
 | **Lateral movement** | `network_connect` + `source_image` — cross-process network correlation |
 | **Token theft** | `logon_id` mismatch — process running under different logon session than parent |
 | **Obfuscated execution** | `command_line_analysis.obfuscation_score` ≥ 2 — base64, caret escaping, string splitting |
-| **Cross-host hunting** | `base_hash` lookup across all hosts — "show me everywhere this behavior occurred" |
+| **Cross-host hunting** | `tokens.stable` lookup across all hosts — "show me everywhere this behavior occurred" |
 
 ### Understanding Windows — What the Kernel Tells You
 
@@ -342,7 +342,7 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 **SOC Triage**: Rare events surface immediately. Common events are pre-scored and deduplicated. Analysts spend time on novel signals, not the 400th `svchost.exe` DNS lookup.
 
-**Threat Hunting**: Query across all endpoints by `base_hash`. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
+**Threat Hunting**: Query across all endpoints by `tokens.stable`. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
 
 **Incident Response**: Reconstruct full process trees with command lines from the PEB, inter-event timing deltas, 3-generation ancestry, and cross-process network correlation.
 
@@ -352,7 +352,7 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 **Windows Internals Research**: Every kernel subsystem's operations, decoded and queryable. Build a behavioral taxonomy of Windows without a kernel debugger.
 
-**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by `base_hash`. Measure detection coverage, identify gaps, validate SIEM rules.
+**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by `tokens.stable`. Measure detection coverage, identify gaps, validate SIEM rules.
 
 **Forensics**: Event timeline with inter-event timing, process lineage, and full command lines. All codes decoded. All paths normalized. No raw hex values to decipher.
 
@@ -398,7 +398,11 @@ You should see log output showing the ETW session starting, events flowing, and 
 ### 4. Install as Windows service
 
 ```powershell
+# From an Administrator PowerShell:
 .\install.ps1
+
+# If you get "running scripts is disabled", use:
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 This installs `LongHorizonsTelemetryAgent` as a Windows service running as LocalSystem. The service auto-starts on boot with failure recovery (3 restarts, then stop).
@@ -408,6 +412,9 @@ This installs `LongHorizonsTelemetryAgent` as a Windows service running as Local
 ```powershell
 .\uninstall.ps1                  # remove service, keep data
 .\uninstall.ps1 -RemoveData      # remove service + all data
+
+# If scripts are disabled:
+powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 ```
 
 ---

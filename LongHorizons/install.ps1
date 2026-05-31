@@ -1,3 +1,6 @@
+# Ensure the current PowerShell session can run scripts
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
 <#
 .SYNOPSIS
     Installs the LongHorizons Telemetry Agent as a Windows service.
@@ -30,6 +33,10 @@
     Install with defaults — agent.exe and config.toml must be in the same directory.
 
 .EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\install.ps1
+    Run when PowerShell script execution is restricted by policy.
+
+.EXAMPLE
     .\install.ps1 -ConfigPath "C:\my-config.toml"
     Install using a specific config file.
 
@@ -38,8 +45,9 @@
     Install the service but don't start it — edit config first, then start manually.
 
 .NOTES
-    Requires Administrator privileges.
+    Requires Administrator privileges (right-click PowerShell → Run as Administrator).
     The agent runs as LocalSystem for ETW kernel trace access.
+    Includes Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass to handle restricted environments.
 #>
 
 param(

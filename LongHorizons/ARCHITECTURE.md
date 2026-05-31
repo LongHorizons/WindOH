@@ -427,7 +427,7 @@ flowchart TB
 | **Per-host RAM** | ~50–150 MB | Process cache (2K entries), CMS sketches (fixed size), SQLite page cache |
 | **Per-host disk I/O** | ~5–20 MB/hour writes | SQLite WAL + log rotation, compressed tokens |
 | **Network to ES** | ~1–10 MB/hour | gzip bulk export, deduplication before send |
-| **Cross-host determinism** | Guaranteed | SID/IP normalization → identical base_hash regardless of host |
+| **Cross-host determinism** | Guaranteed | SID/IP normalization → identical `tokens.stable` regardless of host |
 | **ES cluster load** | O(unique behaviors) not O(total events) | Dedup at edge before ES ingestion |
 | **1,000 hosts → ES** | ~1–10 GB/hour ingest | Depends on behavioral diversity, not event volume |
 
@@ -460,9 +460,9 @@ flowchart LR
 | **Data source** | Windows Event Log (handful of channels) | ETW kernel + user-mode traces (200+ providers) |
 | **Coverage** | Security (4624/4688), System, Application | Process, thread, network, file, registry, memory, DNS, WMI, Defender, PowerShell, Schannel, RPC, COM, CAPI2, AppLocker, Hyper-V... |
 | **Storage model** | Store every event | Store unique behaviors, count duplicates |
-| **Behavioral identity** | None — join on unstructured text | Deterministic SHA-256 base_hash |
+| **Behavioral identity** | None — join on unstructured text | Deterministic `tokens.stable` hash |
 | **Novelty detection** | Manual hunting | Pre-computed rarity band per event |
-| **Cross-host correlation** | Regex/string match on hostname + path | Term query on base_hash across entire fleet |
+| **Cross-host correlation** | Regex/string match on hostname + path | Term query on `tokens.stable` across entire fleet |
 | **ML pipeline readiness** | 60–80% of project time = data engineering | Zero preprocessing required |
 | **Kernel visibility** | None (Event Log is user-mode) | Full kernel trace: thread scheduling, memory ops, IRPs, DPCs |
 

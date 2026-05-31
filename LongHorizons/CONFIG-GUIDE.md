@@ -255,6 +255,7 @@ If nothing prints — you're ready.
 Run the agent in the foreground first to verify everything works:
 
 ```powershell
+# From an Administrator PowerShell:
 .\agent.exe run --config ".\config.toml"
 ```
 

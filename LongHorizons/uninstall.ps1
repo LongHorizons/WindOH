@@ -1,3 +1,6 @@
+# Ensure the current PowerShell session can run scripts
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
 <#
 .SYNOPSIS
     Uninstalls the LongHorizons Telemetry Agent Windows service.

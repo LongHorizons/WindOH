@@ -8,7 +8,7 @@ The agent exports to 5 index families. Create these templates before starting th
 flowchart LR
     subgraph Investigation["Analyst Investigation Flow"]
         Q1["🔍 Discover\nGET telemetry-events\nbehavior_tags:unusual_parent"] -->|
-        "Extract base_hash"| Q2["📊 Hunt\nGET telemetry-events\nterm: tokens.stable"]
+        "Extract tokens.stable"| Q2["📊 Hunt\nGET telemetry-events\nterm: tokens.stable"]
         Q2 -->|
         "Extract pattern_id"| Q3["📈 Analyze\nGET telemetry-patterns\nterm: pattern_id"]
         Q3 -->|
