@@ -255,7 +255,7 @@ If nothing prints — you're ready.
 Run the agent in the foreground first to verify everything works:
 
 ```powershell
-.\target\release\agent.exe run --config ".\config.toml"
+.\agent.exe run --config ".\config.toml"
 ```
 
 You should see log output showing:

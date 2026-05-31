@@ -361,30 +361,53 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 ## Quick Start
 
-### 1. Build
+### 1. Extract
 
-```powershell
-cargo build --release
-# Binary at: target\release\agent.exe (~8 MB)
+Unzip `release.zip` into `C:\ProgramData\LongHorizonsAgent\`. You should have:
+
+```
+C:\ProgramData\LongHorizonsAgent\
+  agent.exe              ← the agent binary (~11 MB)
+  config.toml            ← annotated config template
+  install.ps1            ← service installer
+  uninstall.ps1          ← service uninstaller
+  README.md              ← this file
+  ARCHITECTURE.md        ← architecture deep-dive
+  ES-INDEX-TEMPLATES.md  ← Elasticsearch index templates
+  CONFIG-GUIDE.md        ← step-by-step config walkthrough
 ```
 
 ### 2. Configure
 
-Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml` and set:
+Edit `config.toml` — search for **CHANGEME** and set your values. At minimum:
+
 - `agent.id` — unique host identifier
 - `export.events.endpoint` — Elasticsearch URL
 - `export.events.api_key` — ES API key
 
+See **CONFIG-GUIDE.md** for a full walkthrough.
+
 ### 3. Test run
 
 ```powershell
-.\target\release\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
+.\agent.exe run --config ".\config.toml"
 ```
+
+You should see log output showing the ETW session starting, events flowing, and ES bulk exports succeeding. Press `Ctrl+C` to stop.
 
 ### 4. Install as Windows service
 
 ```powershell
 .\install.ps1
+```
+
+This installs `LongHorizonsTelemetryAgent` as a Windows service running as LocalSystem. The service auto-starts on boot with failure recovery (3 restarts, then stop).
+
+### 5. Uninstall
+
+```powershell
+.\uninstall.ps1                  # remove service, keep data
+.\uninstall.ps1 -RemoveData      # remove service + all data
 ```
 
 ---
@@ -401,15 +424,21 @@ Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml
 
 ---
 
-## Build & Test Verification
+## Release Contents
 
 ```
-cargo check  — 0 errors (all 4 crates)
-cargo test   — 71 passed, 0 failed
-   agent-core:      43 tests
-   agent-etw:       28 tests
-   agent-exporter:   0 tests
+release.zip (~4.6 MB)
+├── agent.exe                    ← pre-built binary (Windows x64, Rust 1.96)
+├── config.toml                  ← annotated config template
+├── install.ps1                  ← service installer (run as Admin)
+├── uninstall.ps1                ← service uninstaller
+├── README.md                    ← this document
+├── ARCHITECTURE.md              ← full architecture reference
+├── ES-INDEX-TEMPLATES.md        ← Elasticsearch index templates (5 indexes)
+└── CONFIG-GUIDE.md              ← step-by-step config walkthrough
 ```
+
+**Binary details:** Compiled with `cargo build --release`, statically linked except for `kernel32.dll`, `advapi32.dll`, and `tdh.dll`. Runs on Windows 10+ and Windows Server 2016+.
 
 ---
 
