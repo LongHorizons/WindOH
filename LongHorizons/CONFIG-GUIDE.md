@@ -242,8 +242,8 @@ Before starting the agent:
 
 Quick grep for missed fields:
 
-```powershell
-Select-String "CHANGEME" config.toml
+```
+findstr "CHANGEME" config.toml
 ```
 
 If nothing prints — you're ready.
@@ -254,17 +254,20 @@ If nothing prints — you're ready.
 
 Run the agent in the foreground first to verify everything works:
 
-```powershell
-# From an Administrator PowerShell:
-.\agent.exe run --config ".\config.toml"
+```cmd
+REM From an Administrator Command Prompt:
+wizard.exe install config.toml
 ```
 
-You should see log output showing:
-- ETW session starting
-- Events flowing
-- ES bulk exports succeeding (HTTP 200)
+The wizard validates your config before installing — it will reject missing CHANGEME values, validate required fields, and rewrite paths to the install directory.
 
-Press `Ctrl+C` to stop. If it runs clean for a minute, you're good to install as a service.
+To check the agent is running properly:
+
+```cmd
+wizard.exe status
+```
+
+Check logs at `C:\ProgramData\LongHorizonsAgent\logs\` for ETW session startup, event flow, and ES bulk export status.
 
 ---
 
@@ -276,7 +279,7 @@ Press `Ctrl+C` to stop. If it runs clean for a minute, you're good to install as
 | ES returns 401/403 | Verify `api_key` is correct base64 format |
 | ES returns 400 mapping conflict | Provider properties type clash — update your index template |
 | Service won't start | Check `C:\ProgramData\LongHorizonsAgent\logs\` for errors |
-| No events flowing | Run `agent.exe run` in foreground to see errors live |
+| Wizard says "not admin" | Run Command Prompt as Administrator |
 | "Access denied" starting ETW | Must run as Administrator or LocalSystem |
 | DB locked errors | SQLite WAL mode handles concurrent access; check that `state_dir` is on local SSD (not network drive) |
 
