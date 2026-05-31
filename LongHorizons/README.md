@@ -368,6 +368,8 @@ Unzip `release.zip` into a working directory. You should have:
 ```
 LongHorizonsAgent\
   wizard.exe             ← the installer/uninstaller/updater (~24 MB)
+  install.ps1            ← PowerShell wrapper: delegates to wizard.exe install
+  uninstall.ps1          ← PowerShell wrapper: delegates to wizard.exe uninstall
   config.toml            ← annotated config template
   README.md              ← this file
   ARCHITECTURE.md        ← architecture deep-dive
@@ -375,7 +377,7 @@ LongHorizonsAgent\
   CONFIG-GUIDE.md        ← step-by-step config walkthrough
 ```
 
-`wizard.exe` embeds the full agent binary (`agent.exe`) inside itself — no separate binary needed.
+`wizard.exe` embeds the full agent binary (`agent.exe`) inside itself — no separate binary needed. The `.ps1` scripts are convenience wrappers that call `wizard.exe` with the right commands.
 
 ### 2. Configure
 
@@ -388,6 +390,15 @@ Edit `config.toml` — search for **CHANGEME** and set your values. At minimum:
 See **CONFIG-GUIDE.md** for a full walkthrough.
 
 ### 3. Install as Windows service
+
+**Option A — PowerShell (recommended for most users):**
+
+```powershell
+.\install.ps1                  # uses .\config.toml
+.\install.ps1 my-config.toml   # uses a specific config
+```
+
+**Option B — wizard.exe directly:**
 
 ```cmd
 REM From an Administrator Command Prompt:
@@ -418,6 +429,15 @@ Stops the service, replaces the agent binary and config, then restarts.
 
 ### 6. Uninstall
 
+**Option A — PowerShell:**
+
+```powershell
+.\uninstall.ps1                  # remove service, keep data
+.\uninstall.ps1 -RemoveData      # remove service + all data
+```
+
+**Option B — wizard.exe directly:**
+
 ```cmd
 wizard.exe uninstall                  # remove service, keep data
 wizard.exe uninstall --remove-data    # remove service + all data
@@ -442,6 +462,8 @@ wizard.exe uninstall --remove-data    # remove service + all data
 ```
 release.zip (~12 MB)
 ├── wizard.exe                   ← installer/uninstaller/updater (embeds agent.exe)
+├── install.ps1                  ← PowerShell wrapper: delegates to wizard.exe install
+├── uninstall.ps1                ← PowerShell wrapper: delegates to wizard.exe uninstall
 ├── config.toml                  ← annotated config template
 ├── README.md                    ← this document
 ├── ARCHITECTURE.md              ← full architecture reference
