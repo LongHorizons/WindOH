@@ -10,8 +10,7 @@ param(
     [string]$BinaryPath = ".\agent.exe",
     [string]$ConfigPath = ".\config.toml",
     [string]$InstallDir = "C:\ProgramData\LongHorizonsAgent",
-    [string]$ServiceName = "LongHorizonsTelemetryAgent",
-    [int]$HealthPort = 8080
+    [string]$ServiceName = "LongHorizonsTelemetryAgent"
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +36,8 @@ if (-not (Test-Path $ConfigPath)) {
 
 if (-not (Test-Path $BinaryPath)) {
     Write-Host "ERROR: agent.exe not found at: $BinaryPath" -ForegroundColor Red
-    Write-Host "Extract release.zip and place agent.exe alongside this installer." -ForegroundColor Red
+    Write-Host "Build it first: cargo build --release" -ForegroundColor Red
+    Write-Host "Then copy target\release\agent.exe to the Presentation directory." -ForegroundColor Red
     exit 1
 }
 
@@ -148,23 +148,8 @@ if ($svc -and $svc.Status -eq 'Running') {
     Write-Host "  Service did not start. Check logs at: $logDir" -ForegroundColor Red
     Write-Host "  Common issues:"
     Write-Host "    - config.toml has invalid ES endpoint"
-    Write-Host "    - Port $HealthPort is in use (change agent.health_port in config)"
+    Write-Host "    - config.toml has CHANGEME placeholders still set"
     Write-Host "    - Check Windows Event Viewer under '$ServiceName'"
-}
-
-# ── Health check ─────────────────────────────────────────────────────────────
-
-Write-Host ""
-Write-Host "Testing health endpoint..." -ForegroundColor Yellow
-try {
-    $health = Invoke-RestMethod -Uri "http://127.0.0.1:$HealthPort/health" -TimeoutSec 10 -ErrorAction Stop
-    Write-Host "  Status:  $($health.status)" -ForegroundColor Green
-    Write-Host "  Version: $($health.version)"
-    Write-Host "  Host:    $($health.host.name) ($($health.host.id))"
-    Write-Host "  OS:      $($health.host.os_version)"
-} catch {
-    Write-Host "  Health check failed. The service may still be starting." -ForegroundColor Magenta
-    Write-Host "  Try again in a few seconds: Invoke-RestMethod http://127.0.0.1:$HealthPort/health"
 }
 
 # ── Summary ──────────────────────────────────────────────────────────────────
@@ -176,7 +161,6 @@ Write-Host "Service name:  $ServiceName"
 Write-Host "Config:        $destConfig"
 Write-Host "Logs:          $logDir"
 Write-Host "State/DB:      $stateDir"
-Write-Host "Health:        http://127.0.0.1:$HealthPort/health"
 Write-Host ""
 Write-Host "Manage with standard Windows service commands:"
 Write-Host "  sc.exe start  $ServiceName"

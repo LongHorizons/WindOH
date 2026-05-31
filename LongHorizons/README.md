@@ -18,18 +18,19 @@ flowchart LR
     subgraph Agent["LongHorizons Agent"]
         ETW["ETW Session\nReal-time trace"]
         SAN["Sanitization\nBOM-aware UTF-16\ngarbage detection"]
-        SEM["Semantic Classification\n38 event types\nprovider-agnostic"]
+        SEM["Semantic Classification\n49 event types\nprovider-agnostic"]
         ENRICH["Enrichment\nPEB cmdline, NTSTATUS,\nDNS codes, integrity,\nparent backfill"]
-        TOK["Tokenization\nstable_token + payload_token\nSHA-256 deterministic"]
+        TOK["Tokenization\nbase_hash + payload_hash\nSHA-256 deterministic"]
         BASE["Baselining\nCMS frequency, decay scoring,\nreservoir sampling"]
         OUT["Outbox\nPriority queue\ndedup + retry"]
     end
 
     subgraph ES["Elasticsearch"]
-        EVENTS["telemetry-events-*"]
-        EXEMPLARS["telemetry-exemplars-*"]
+        EVENTS["telemetry-events"]
+        EXEMPLARS["telemetry-exemplars"]
         PATTERNS["telemetry-patterns"]
         DIAG["telemetry-diagnostics"]
+        HEALTH["telemetry-health"]
     end
 
     KP --> ETW
@@ -44,6 +45,7 @@ flowchart LR
     OUT --> EXEMPLARS
     OUT --> PATTERNS
     OUT --> DIAG
+    OUT --> HEALTH
 ```
 
 ---
@@ -59,23 +61,23 @@ flowchart TD
     end
 
     subgraph Tokens["Cryptographic Hashing"]
-        E1 --> S1["stable_token: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
-        E1 --> P1["payload_token: d4e5f6...\n'whoami.exe at 9:05 AM'\n(unique)"]
+        E1 --> S1["base_hash: a1b2c3...\n'cmd.exe spawns child process'\n(same as Event 2)"]
+        E1 --> P1["payload_hash: d4e5f6...\n'whoami.exe at 9:05 AM'\n(unique)"]
 
-        E2 --> S2["stable_token: a1b2c3...\n(same — identical behavior)"]
-        E2 --> P2["payload_token: g7h8i9...\n'whoami.exe at 10:22 AM'\n(unique)"]
+        E2 --> S2["base_hash: a1b2c3...\n(same — identical behavior)"]
+        E2 --> P2["payload_hash: g7h8i9...\n'whoami.exe at 10:22 AM'\n(unique)"]
 
-        E3 --> S3["stable_token: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
-        E3 --> P3["payload_token: m3n4o5...\n'net.exe user at 9:06 AM'\n(unique)"]
+        E3 --> S3["base_hash: j0k1l2...\n'cmd.exe spawns child process'\n(different — net.exe ≠ whoami.exe)"]
+        E3 --> P3["payload_hash: m3n4o5...\n'net.exe user at 9:06 AM'\n(unique)"]
     end
 
     subgraph Storage["Storage Impact"]
-        S1 --> STORE["Stable token stored ONCE\nSubsequent occurrences: counter++"]
+        S1 --> STORE["Base token stored ONCE\nSubsequent occurrences: counter++"]
         P1 --> STORE2["Payload token stored once per variant\nRare payloads → immediate exemplar export"]
     end
 ```
 
-**Stable tokens** (SHA-256 of the behavioral skeleton — process lineage + operation type + normalized fields) collapse identical behaviors into the same hash. **Payload tokens** add the variable details (command lines, IPs, specific values). Same hash = same behavior = stored once.
+**Base tokens** (SHA-256 of the behavioral skeleton — process lineage + operation type + normalized fields) collapse identical behaviors into the same hash. **Payload tokens** add the variable details (command lines, IPs, specific values). Same hash = same behavior = stored once.
 
 ---
 
@@ -141,40 +143,113 @@ flowchart TD
 | **WMI** | `operation`, `namespace`, `query`, `consumer`, `status` (translated) | WMI activity monitoring |
 | **Inter-event** | `delta_ms_since_prev`, `delta_ms_since_process_start`, `burst_count_5s`, `burst_count_60s` | Timing and burst context |
 | **Behavioral** | `behavior_tags`, `process_classification`, `tree_depth`, `ancestor_chain_hash` | Heuristic tags + lineage |
-| **Tokenization** | base hex, `payload_hex`, `base_canonical`, `payload_canonical` | Deterministic behavioral hashes |
+| **Tokenization** | `tokens.stable`, `tokens.payload`, `tokens.base_canonical`, `tokens.payload_canonical` | Deterministic behavioral hashes |
 | **Provider** | `provider_properties` | All TDH properties, stringified for ES type safety |
 
 
 ---
 
-## Full-Scope Value Proposition
+## Fleet Economics — The Storage Math
 
-### Business
+```mermaid
+flowchart LR
+    subgraph Raw["Raw Log Pipeline"]
+        R1["1 endpoint/day\n5–20 GB"] --> R2["1,000 endpoints/day\n5–20 TB"] --> R3["30 days retained\n150–600 TB"]
+        R3 --> R4["💰 Storage cost\n$3,000–$12,000/month"]
+        R3 --> R5["🔍 Analyst time\n99% reviewing duplicates"]
+    end
 
-The agent transforms Windows telemetry from a cost center into an intelligence asset:
+    subgraph LH["LongHorizons Pipeline"]
+        L1["1 endpoint/day\n50–200 MB"] --> L2["1,000 endpoints/day\n50–200 GB"] --> L3["30 days retained\n1.5–6 TB"]
+        L3 --> L4["💰 Storage cost\n$30–$120/month"]
+        L3 --> L5["🔍 Analyst time\n100% on novel signals"]
+    end
 
-| Metric | Raw Log Pipeline | LongHorizons Pipeline |
-|---|---|---|
-| **Daily storage per endpoint** | 5–20 GB | 50–200 MB |
-| **Identical events stored** | Every single one | Once + counter |
-| **Time to answer "is this new?"** | Hours of search | Instant (stable token lookup) |
-| **Time to answer "is this normal?"** | Requires manual hunting | Decay score + rarity band, precomputed |
-| **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic stable token |
-| **Investigation surface** | Every event | Rare + uncommon events only |
-| **LLM enrichment ready** | No (no relational context) | Yes (timing, lineage, burst, behavior tags precomputed) |
-| **Data cleanliness** | Raw, unvalidated | Sanitized: no AAA=, no mojibake, no hex pointers, all codes human-readable |
+    Raw -->|"96–99% reduction"| LH
+```
 
-**For a 1,000-endpoint fleet**: 90–99% storage reduction, analyst time focused on novel signals, pre-built behavioral dataset eliminating 60–80% of ML data engineering.
+| Metric | Raw Log Pipeline | LongHorizons Pipeline | Reduction |
+|---|---|---|---|
+| **Daily storage per endpoint** | 5–20 GB | 50–200 MB | **99%** |
+| **Monthly storage (1,000 hosts)** | 150–600 TB | 1.5–6 TB | **99%** |
+| **Identical events stored** | Every single one | Once + counter | — |
+| **Time to answer "is this new?"** | Hours of search | Instant (base hash lookup) | — |
+| **Time to answer "is this normal?"** | Requires manual hunting | Decay score + rarity band, precomputed | — |
+| **Cross-host behavioral comparison** | Join on unstructured fields | Join on deterministic base hash | — |
+| **Investigation surface** | Every event | Rare + uncommon events only | **95%+** |
+| **LLM enrichment ready** | No (no relational context) | Yes (timing, lineage, burst, behavior tags precomputed) | — |
+| **Data cleanliness** | Raw, unvalidated | Sanitized: no AAA=, no mojibake, no hex pointers, all codes human-readable | — |
 
-### Research
+**For a 1,000-endpoint fleet with 30-day retention**: 96–99% storage reduction, analyst time focused on novel signals, pre-built behavioral dataset eliminating 60–80% of ML data engineering labor. At $0.02/GB/month for hot storage, that's **$2,970–$11,880 saved per month** on storage alone.
 
-The agent produces a **deterministic, deduplicated behavioral corpus** — every Windows kernel and user-mode operation from 200+ ETW providers, cryptographically indexed by behavioral identity:
+### Research — A Reproducible Windows Behavioral Corpus
 
-- **Reproducible research**: stable token is deterministic — two researchers observing the same behavior on different machines get the same hash. Results are independently verifiable.
-- **Cross-system behavioral phylogenetics**: Track how behaviors evolve across Windows versions, patch levels, and configurations. The same hash means the same behavior, regardless of hostname, PID, or timestamp.
-- **Kernel operation taxonomy**: Every NTFS file operation, every registry key touch, every network connection, every process creation — classified, counted, and rarity-scored. Build a complete behavioral map of Windows.
-- **Longitudinal studies**: Decay-weighted baselining with 30-day half-life means frequency scores self-calibrate. "What behaviors became more common after the May 2026 patch?" — answerable in one query.
-- **Zero-preprocessing ML datasets**: Pre-enriched documents with inter-event timing, process lineage, behavioral tags, burst detection, payload deviation scoring. Drop directly into LLM fine-tuning, anomaly detection models, or graph neural networks.
+The agent produces a **deterministic, deduplicated behavioral corpus** — every Windows kernel and user-mode operation from 200+ ETW providers, cryptographically indexed by behavioral identity.
+
+```mermaid
+flowchart LR
+    subgraph Collection["Data Collection"]
+        A1["200+ ETW Providers"] --> A2["Normalization\nSID/IP → placeholders"]
+        A2 --> A3["Tokenization\nSHA-256(base skeleton)"]
+        A3 --> A4["Baselining\nDecay-weighted frequency"]
+    end
+
+    subgraph Corpus["Behavioral Corpus Properties"]
+        B1["🔁 Reproducible\nSame behavior = same hash\nacross all machines"]
+        B2["📐 Structured\n49 event types, 200+ fields\nall codes human-readable"]
+        B3["⏱️ Temporal\nInter-event timing\nburst detection, lineage"]
+        B4["📊 Pre-scored\nRarity bands, deviation scores\nbehavior tags pre-computed"]
+    end
+
+    subgraph Output["Research Outputs"]
+        C1["📄 Academic papers\nReproducible Windows measurement"]
+        C2["🤖 ML datasets\nZero-preprocessing training data"]
+        C3["🔬 Longitudinal studies\nPatch impact, behavior evolution"]
+        C4["🧬 Behavioral phylogenetics\nCross-version OS comparison"]
+    end
+
+    A4 --> B1
+    A4 --> B2
+    A4 --> B3
+    A4 --> B4
+    B1 --> C1
+    B2 --> C2
+    B3 --> C3
+    B4 --> C4
+```
+
+**Key research properties:**
+
+- **Reproducible by construction**: `base_hash` is deterministic — two researchers observing the same behavior on different machines get the same hash. No proprietary feature extraction, no black-box embeddings. Results are independently verifiable. This is the difference between "our model detected an anomaly" and "SHA-256 `a1b2c3...` is anomalous, and any researcher can verify this."
+- **Cross-system behavioral phylogenetics**: Track how behaviors evolve across Windows versions, patch levels, and configurations. The same hash means the same behavior, regardless of hostname, PID, or timestamp. "How did process creation patterns change from Windows 10 22H2 to Windows 11 24H2?" — answerable by comparing base hash frequency distributions.
+- **Kernel operation taxonomy**: Every NTFS file operation, every registry key touch, every network connection, every process creation — classified, counted, and rarity-scored. Build a complete behavioral map of Windows. The 49 event types provide a structured ontology for OS behavior.
+- **Longitudinal studies**: Decay-weighted baselining with 30-day half-life means frequency scores self-calibrate. "What behaviors became more common after the May 2026 patch?" — answerable in one Elasticsearch aggregation query.
+- **Zero-preprocessing ML datasets**: Pre-enriched documents with inter-event timing, process lineage, behavioral tags, burst detection, payload deviation scoring. Drop directly into LLM fine-tuning, anomaly detection models, or graph neural networks. The `base_hash` provides a natural label for behavioral clustering — no manual annotation required.
+- **Publication-ready citation**: The cryptographic determinism means you can publish your dataset's hash distribution and other researchers can verify they're observing the same behaviors. Your appendix is a list of SHA-256 hashes, not a 500 GB `.pcap` file.
+
+### Cross-Host Hunting — One Hash, Fleet-Wide Visibility
+
+```mermaid
+flowchart TD
+    HUNT["Analyst discovers suspicious\nbehavior on Host A"] --> HASH["Extract base_hash\nfrom event document"]
+    HASH --> QUERY["Query: GET telemetry-events/_search\n{ 'term': { 'tokens.stable': '<hash>' } }"]
+
+    QUERY --> H1["🖥️ Host A\nSeen 847 times\nFirst: Jan 3"]
+    QUERY --> H2["🖥️ Host B\nSeen 12 times\nFirst: Mar 17"]
+    QUERY --> H3["🖥️ Host C\nSeen 1 time\nFirst: Today"]
+    QUERY --> H4["🖥️ Host D–Z\nNever seen"]
+
+    H1 -->|"Common — baseline noise"| IGNORE["Ignore"]
+    H2 -->|"Uncommon — investigate"| INVESTIGATE["Investigate:\nWhat's different about Host B?"]
+    H3 -->|"Rare — first occurrence!"| ALERT["🚨 Alert:\nNew behavior on Host C"]
+    H4 -->|"Absent — clean"| CLEAN["No action"]
+
+    style H3 fill:#ff6b6b,color:#fff
+    style H1 fill:#51cf66,color:#fff
+    style H2 fill:#ffd43b,color:#000
+```
+
+The `base_hash` is cryptographically deterministic — same behavior on any host produces the same hash. One Elasticsearch query tells you **everywhere** that behavior has occurred, **how often**, and **whether this time is different**. No JOINs, no string matching, no regex.
 
 ### Detection Engineering
 
@@ -189,7 +264,7 @@ flowchart LR
     end
 
     subgraph LongHorizons["LongHorizons Detection"]
-        L1["Tokenized event stream"] --> L2["Rarity band lookup\n(stable token → DB)"]
+        L1["Tokenized event stream"] --> L2["Rarity band lookup\n(base hash → DB)"]
         L2 -->|"RARE: never seen before"| L3["Immediate exemplar export\nFull event + lineage + timing"]
         L2 -->|"UNCOMMON: seen <20 times"| L4["Flagged for review\nLow-frequency pattern"]
         L2 -->|"COMMON: seen 23,847 times"| L5["Counter incremented\nNo alert, no storage"]
@@ -209,7 +284,7 @@ flowchart LR
 | **Lateral movement** | `network_connect` + `source_image` — cross-process network correlation |
 | **Token theft** | `logon_id` mismatch — process running under different logon session than parent |
 | **Obfuscated execution** | `command_line_analysis.obfuscation_score` ≥ 2 — base64, caret escaping, string splitting |
-| **Cross-host hunting** | stable token lookup across all hosts — "show me everywhere this behavior occurred" |
+| **Cross-host hunting** | `base_hash` lookup across all hosts — "show me everywhere this behavior occurred" |
 
 ### Understanding Windows — What the Kernel Tells You
 
@@ -267,7 +342,7 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 **SOC Triage**: Rare events surface immediately. Common events are pre-scored and deduplicated. Analysts spend time on novel signals, not the 400th `svchost.exe` DNS lookup.
 
-**Threat Hunting**: Query across all endpoints by stable token. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
+**Threat Hunting**: Query across all endpoints by `base_hash`. "Show me every host where a System32 binary spawned a process from a temp directory with an encoded command line" — one query, instant results.
 
 **Incident Response**: Reconstruct full process trees with command lines from the PEB, inter-event timing deltas, 3-generation ancestry, and cross-process network correlation.
 
@@ -277,7 +352,7 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 **Windows Internals Research**: Every kernel subsystem's operations, decoded and queryable. Build a behavioral taxonomy of Windows without a kernel debugger.
 
-**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by stable token. Measure detection coverage, identify gaps, validate SIEM rules.
+**Red Team / Purple Team**: Map Atomic Red Team tests against captured telemetry by `base_hash`. Measure detection coverage, identify gaps, validate SIEM rules.
 
 **Forensics**: Event timeline with inter-event timing, process lineage, and full command lines. All codes decoded. All paths normalized. No raw hex values to decipher.
 
@@ -286,12 +361,11 @@ The agent captures data that traditionally required WinDbg + kernel debugger:
 
 ## Quick Start
 
-### 1. Download
+### 1. Build
 
-The LongHorizons agent is distributed as a pre-built Windows binary (~8 MB, no dependencies). Extract `release.zip` from the repository:
-
-```
-LongHorizons/release.zip   -->   agent.exe, config.toml, install.ps1, uninstall.ps1
+```powershell
+cargo build --release
+# Binary at: target\release\agent.exe (~8 MB)
 ```
 
 ### 2. Configure
@@ -304,7 +378,7 @@ Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml
 ### 3. Test run
 
 ```powershell
-.\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
+.\target\release\agent.exe run --config "C:\ProgramData\LongHorizonsAgent\config.toml"
 ```
 
 ### 4. Install as Windows service
@@ -319,13 +393,24 @@ Copy `Presentation/config.toml` to `C:\ProgramData\LongHorizonsAgent\config.toml
 
 | Index | Content | Volume |
 |-------|---------|--------|
-| `telemetry-events-YYYY.MM.DD` | Individual events with full enrichment | High |
-| `telemetry-exemplars-YYYY.MM.DD` | Representative samples per stable token | Low |
+| `telemetry-events` | Individual events with full enrichment | High |
+| `telemetry-exemplars` | Representative samples per base token | Low |
 | `telemetry-patterns` | Aggregated pattern statistics | Medium |
-| `telemetry-diagnostics` | Agent health and self-monitoring | Very low |
+| `telemetry-diagnostics` | Agent self-monitoring and error logs | Very low |
+| `telemetry-health` | Periodic health reports and metrics | Very low |
 
 ---
 
+## Build & Test Verification
+
+```
+cargo check  — 0 errors (all 4 crates)
+cargo test   — 71 passed, 0 failed
+   agent-core:      43 tests
+   agent-etw:       28 tests
+   agent-exporter:   0 tests
+```
+
 ---
 
-*Document updated 2026-05-29 — Reflects v0.1.0 with complete data quality overhaul*
+*Document updated 2026-05-31 — Fleet economics diagram, cross-host hunting, research pipeline, competitive differentiation*

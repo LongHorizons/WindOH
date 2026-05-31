@@ -10,10 +10,10 @@ WindOH is a TypeScript/MongoDB web application that consumes telemetry from the 
 
 ### 1.1 Core Value Proposition
 
-The LongHorizons agent produces cryptographically stable behavioral tokens (stable token and payload token) at wire speed. But a hash alone doesn't tell an analyst *what the behavior means*. WindOH closes that gap:
+The LongHorizons agent produces cryptographically stable behavioral tokens (`stable_hash` and `payload_hash`) at wire speed. But a hash alone doesn't tell an analyst *what the behavior means*. WindOH closes that gap:
 
 ```
-stable_token: a1b2c3... → "cmd.exe spawned whoami.exe from a temp directory
+stable_hash: a1b2c3... → "cmd.exe spawned whoami.exe from a temp directory
                            with encoded command line — this is a classic
                            Living-off-the-Land (LOLBin) reconnaissance pattern"
 ```
@@ -70,13 +70,13 @@ Every token in the system gets enriched once by the LLM, cached in MongoDB, and 
 
 ### 2.1 Data Flow
 
-1. **Ingest**: WindOH polls Elasticsearch `longhorizons-events`, `longhorizons-exemplars`, and `longhorizons-patterns` indexes for new documents
-2. **Token Extraction**: Extract stable token, payload token, and all enrichment fields from each event
-3. **MongoDB Upsert**: Each unique stable token gets a document in the `tokens` collection. Known tokens update counters; unknown tokens trigger enrichment
+1. **Ingest**: WindOH polls Elasticsearch `telemetry-events`, `telemetry-exemplars`, and `telemetry-patterns` indexes for new documents
+2. **Token Extraction**: Extract `stable_hash`, `payload_hash`, and all enrichment fields from each event
+3. **MongoDB Upsert**: Each unique `stable_hash` gets a document in the `tokens` collection. Known tokens update counters; unknown tokens trigger enrichment
 4. **LLM Enrichment** (new tokens only): The enrichment pipeline sends a structured prompt to the local LLM. Response is parsed and stored
 5. **Sequence Recording**: Each `agent.id` has an event sequence. Tokens are appended in temporal order for Markov modeling
 6. **Markov Training**: Periodic background job rebuilds transition probability matrices from sequence data
-7. **Atomic Red Team Mapping**: When ART tests run, their telemetry is cross-referenced by stable token to measure detection coverage
+7. **Atomic Red Team Mapping**: When ART tests run, their telemetry is cross-referenced by `stable_hash` to measure detection coverage
 8. **SearXNG Integration**: IOCs (IPs, domains, hashes) extracted from events are enriched via SearXNG metasearch
 
 ---
@@ -85,7 +85,7 @@ Every token in the system gets enriched once by the LLM, cached in MongoDB, and 
 
 ### 3.1 `tokens` Collection
 
-The central collection. One document per unique stable token.
+The central collection. One document per unique `stable_hash`.
 
 ```typescript
 // models/Token.ts
@@ -93,8 +93,8 @@ interface IToken {
   _id: ObjectId;
 
   // ── Identity ──
-  stable_token: string;            // Indexed, unique — the behavioral fingerprint
-  payload_tokens: string[];       // Top K payload variants seen
+  stable_hash: string;            // Indexed, unique — the behavioral fingerprint
+  payload_hashes: string[];       // Top K payload variants seen
 
   // ── LLM Enrichment (cached) ──
   enrichment: {
@@ -165,7 +165,7 @@ interface IToken {
 }
 
 // Indexes
-// { stable_token: 1 } — unique
+// { stable_hash: 1 } — unique
 // { 'enrichment.mitre_attack': 1 } — search by technique
 // { enrichment_status: 1 } — find unenriched tokens
 // { event_type: 1, rarity_band: 1 } — browse by type + rarity
@@ -184,8 +184,8 @@ interface IEventSequence {
   _id: ObjectId;
   agent_id: string;               // Which host
   timestamp: Date;                // Event timestamp
-  stable_token: string;            // Which behavior
-  payload_token: string;           // Exact details
+  stable_hash: string;            // Which behavior
+  payload_hash: string;           // Exact details
   process_pid: number;
   process_name: string;
   event_type: string;
@@ -195,8 +195,8 @@ interface IEventSequence {
   token_id: ObjectId;             // FK → tokens collection
 
   // Sequence context
-  prev_stable_token: string | null;
-  next_stable_token: string | null;
+  prev_stable_hash: string | null;
+  next_stable_hash: string | null;
   delta_ms_since_prev: number | null;
   delta_ms_to_next: number | null;
 
@@ -205,8 +205,8 @@ interface IEventSequence {
 
 // Indexes
 // { agent_id: 1, timestamp: 1 } — sequence queries
-// { stable_token: 1 } — "where does this behavior appear in sequences"
-// { agent_id: 1, prev_stable_token: 1, stable_token: 1 } — Markov transition lookup
+// { stable_hash: 1 } — "where does this behavior appear in sequences"
+// { agent_id: 1, prev_stable_hash: 1, stable_hash: 1 } — Markov transition lookup
 ```
 
 ### 3.3 `markov_transitions` Collection
@@ -217,8 +217,8 @@ Pre-computed transition probabilities.
 // models/MarkovTransition.ts
 interface IMarkovTransition {
   _id: ObjectId;
-  from_stable_token: string;
-  to_stable_token: string;
+  from_stable_hash: string;
+  to_stable_hash: string;
   transition_count: number;
   probability: number;             // P(to | from)
   avg_delta_ms: number;
@@ -234,8 +234,8 @@ interface IMarkovTransition {
 }
 
 // Indexes
-// { from_stable_token: 1, probability: -1 } — top next predictions
-// { from_stable_token: 1, to_stable_token: 1 } — unique transition
+// { from_stable_hash: 1, probability: -1 } — top next predictions
+// { from_stable_hash: 1, to_stable_hash: 1 } — unique transition
 // { host_count: -1 } — most widespread transitions
 ```
 
@@ -262,14 +262,14 @@ interface IAtomicTest {
     status: 'running' | 'success' | 'failed' | 'timeout';
     agent_id: string;              // Which host ran it
     captured_event_count: number;
-    captured_stable_tokens: string[];
+    captured_stable_hashes: string[];
     token_ids: ObjectId[];         // FK → tokens
   }[];
 
   // Coverage
   coverage: {
     events_captured: number;       // How many ETW events fired
-    tokens_generated: number;      // Unique stable tokens observed
+    tokens_generated: number;      // Unique stable hashes observed
     tokens_pre_enriched: number;   // How many tokens already existed (known behavior)
     tokens_new: number;            // How many tokens were unknown (new behavior)
     detection_gap: boolean;        // true if any expected behavior was NOT captured
@@ -382,7 +382,7 @@ const llm = new OpenAI({
 const enrichmentQueue = new Queue('token-enrichment', { connection });
 
 const worker = new Worker('token-enrichment', async (job: Job) => {
-  const { tokenId, stableToken } = job.data;
+  const { tokenId, stableHash } = job.data;
 
   const token = await Token.findById(tokenId);
   if (!token || token.enrichment_status === 'complete') return;
@@ -471,7 +471,7 @@ async function pollNewEvents() {
   const lastPoll = await getLastPollTimestamp(); // Stored in MongoDB or Redis
 
   const result = await es.search({
-    index: 'longhorizons-events',
+    index: 'telemetry-events',
     body: {
       query: {
         bool: {
@@ -489,18 +489,18 @@ async function pollNewEvents() {
 
   for (const hit of result.hits.hits) {
     const src = hit._source as any;
-    const stableToken = src.stable_hex || src.stable_token;
+    const stableHash = src.stable_hex || src.stable_hash;
 
-    if (!stableToken || seenHashes.has(stableToken)) continue;
-    seenHashes.add(stableToken);
+    if (!stableHash || seenHashes.has(stableHash)) continue;
+    seenHashes.add(stableHash);
 
     // Upsert token document
     const token = await Token.findOneAndUpdate(
-      { stable_token: stableToken },
+      { stable_hash: stableHash },
       {
         $setOnInsert: {
-          stable_token: stableToken,
-          payload_tokens: [],
+          stable_hash: stableHash,
+          payload_hashes: [],
           enrichment_status: 'pending',
           enrichment_attempts: 0,
           first_seen: new Date(),
@@ -520,7 +520,7 @@ async function pollNewEvents() {
         },
         $inc: { total_occurrences: 1 },
         $addToSet: {
-          payload_tokens: { $each: [src.payload_hex || src.payload_token].filter(Boolean) },
+          payload_hashes: { $each: [src.payload_hex || src.payload_hash].filter(Boolean) },
           host_ids: src.agent?.id,
         },
       },
@@ -534,9 +534,9 @@ async function pollNewEvents() {
     ) {
       await enrichmentQueue.add('enrich-token', {
         tokenId: token._id.toString(),
-        stableToken: stableToken,
+        stableHash: stableHash,
       }, {
-        jobId: `enrich-${stableToken}`,
+        jobId: `enrich-${stableHash}`,
         removeOnComplete: true,
         removeOnFail: 100,
       });
@@ -559,7 +559,7 @@ setInterval(pollNewEvents, 10_000);
 
 ### 5.1 Concept
 
-Each agent produces a temporally ordered sequence of stable token values. Over thousands of endpoints and millions of events, these sequences reveal predictable behavioral chains:
+Each agent produces a temporally ordered sequence of `stable_hash` values. Over thousands of endpoints and millions of events, these sequences reveal predictable behavioral chains:
 
 ```
 A → B → C with P=0.74  (e.g., cmd.exe start → whoami.exe → net.exe localgroup)
@@ -583,10 +583,10 @@ import Token from '@/models/Token';
 
 async function appendToSequence(event: any) {
   const agentId = event.agent?.id;
-  const stableToken = event.stable_hex || event.stable_token;
-  const payloadToken = event.payload_hex || event.payload_token;
+  const stableHash = event.stable_hex || event.stable_hash;
+  const payloadHash = event.payload_hex || event.payload_hash;
 
-  if (!agentId || !stableToken) return;
+  if (!agentId || !stableHash) return;
 
   // Get the previous event for this agent to link
   const prev = await EventSequence.findOne(
@@ -602,13 +602,13 @@ async function appendToSequence(event: any) {
   const seq = await EventSequence.create({
     agent_id: agentId,
     timestamp: new Date(event['@timestamp']),
-    stable_token: stableToken,
-    payload_token: payloadToken || '',
+    stable_hash: stableHash,
+    payload_hash: payloadHash || '',
     process_pid: event.process?.pid || 0,
     process_name: event.process?.image_name || '',
     event_type: event.event_type || '',
     telemetry_event_id: event.telemetry_event_id || 0,
-    prev_stable_token: prev?.stable_token || null,
+    prev_stable_hash: prev?.stable_hash || null,
     delta_ms_since_prev: deltaMs,
   });
 
@@ -618,7 +618,7 @@ async function appendToSequence(event: any) {
       { _id: prev._id },
       {
         $set: {
-          next_stable_token: stableToken,
+          next_stable_hash: stableHash,
           delta_ms_to_next: deltaMs,
         },
       }
@@ -640,14 +640,14 @@ async function buildMarkovTransitions() {
   const pipeline = [
     {
       $match: {
-        next_stable_token: { $ne: null },
+        next_stable_hash: { $ne: null },
       },
     },
     {
       $group: {
         _id: {
-          from: '$stable_token',
-          to: '$next_stable_token',
+          from: '$stable_hash',
+          to: '$next_stable_hash',
         },
         count: { $sum: 1 },
         deltas: { $push: '$delta_ms_to_next' },
@@ -686,11 +686,11 @@ async function buildMarkovTransitions() {
 
       bulkOps.push({
         updateOne: {
-          filter: { from_stable_token: fromHash, to_stable_token: t._id.to },
+          filter: { from_stable_hash: fromHash, to_stable_hash: t._id.to },
           update: {
             $set: {
-              from_stable_token: fromHash,
-              to_stable_token: t._id.to,
+              from_stable_hash: fromHash,
+              to_stable_hash: t._id.to,
               transition_count: t.count,
               probability: Math.round(probability * 10000) / 10000,
               avg_delta_ms: Math.round(avgDelta),
@@ -717,17 +717,17 @@ async function buildMarkovTransitions() {
 async function denormalizeDescriptions() {
   const tokens = await Token.find({
     'enrichment.short_description': { $exists: true },
-  }).select('stable_token enrichment.short_description').lean();
+  }).select('stable_hash enrichment.short_description').lean();
 
-  const descMap = new Map(tokens.map(t => [t.stable_token, t.enrichment?.short_description || 'Unknown']));
+  const descMap = new Map(tokens.map(t => [t.stable_hash, t.enrichment?.short_description || 'Unknown']));
 
   for (const [hash, desc] of descMap) {
     await MarkovTransition.updateMany(
-      { from_stable_token: hash, from_token_description: { $exists: false } },
+      { from_stable_hash: hash, from_token_description: { $exists: false } },
       { $set: { from_token_description: desc } }
     );
     await MarkovTransition.updateMany(
-      { to_stable_token: hash, to_token_description: { $exists: false } },
+      { to_stable_hash: hash, to_token_description: { $exists: false } },
       { $set: { to_token_description: desc } }
     );
   }
@@ -745,12 +745,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import MarkovTransition from '@/models/MarkovTransition';
 
 export async function GET(req: NextRequest) {
-  const stableToken = req.nextUrl.searchParams.get('stable_token');
-  if (!stableToken) {
-    return NextResponse.json({ error: 'stable_token required' }, { status: 400 });
+  const stableHash = req.nextUrl.searchParams.get('stable_hash');
+  if (!stableHash) {
+    return NextResponse.json({ error: 'stable_hash required' }, { status: 400 });
   }
 
-  const predictions = await MarkovTransition.find({ from_stable_token: stableToken })
+  const predictions = await MarkovTransition.find({ from_stable_hash: stableHash })
     .sort({ probability: -1 })
     .limit(10)
     .lean();
@@ -758,9 +758,9 @@ export async function GET(req: NextRequest) {
   const totalProbability = predictions.reduce((s, p) => s + p.probability, 0);
 
   return NextResponse.json({
-    from_stable_token: stableToken,
+    from_stable_hash: stableHash,
     predictions: predictions.map(p => ({
-      to_stable_token: p.to_stable_token,
+      to_stable_hash: p.to_stable_hash,
       description: p.to_token_description,
       probability: p.probability,
       transition_count: p.transition_count,
@@ -780,7 +780,7 @@ function computeEntropy(probs: number[]): number {
 
 ### 5.5 Anomaly Detection via Markov Surprise
 
-When a new event arrives, compare its `(prev_stable_token, current_stable_token)` transition against the Markov model:
+When a new event arrives, compare its `(prev_stable_hash, current_stable_hash)` transition against the Markov model:
 
 ```typescript
 // lib/anomaly-detector.ts
@@ -798,8 +798,8 @@ export async function scoreSequenceAnomaly(
   }
 
   const transition = await MarkovTransition.findOne({
-    from_stable_token: prevHash,
-    to_stable_token: currentHash,
+    from_stable_hash: prevHash,
+    to_stable_hash: currentHash,
   }).lean();
 
   const probability = transition?.probability || 0;
@@ -807,7 +807,7 @@ export async function scoreSequenceAnomaly(
   const surpriseScore = probability > 0 ? -Math.log2(probability) : 15; // Cap at 15 bits
 
   // Get top 5 expected transitions
-  const expected = await MarkovTransition.find({ from_stable_token: prevHash })
+  const expected = await MarkovTransition.find({ from_stable_hash: prevHash })
     .sort({ probability: -1 })
     .limit(5)
     .lean();
@@ -873,7 +873,7 @@ const worker = new Worker('atomic-execution', async (job) => {
           status: 'running',
           agent_id: agentId,
           captured_event_count: 0,
-          captured_stable_tokens: [],
+          captured_stable_hashes: [],
           token_ids: [],
         },
       },
@@ -913,7 +913,7 @@ const worker = new Worker('atomic-execution', async (job) => {
 
     // Query Elasticsearch for events during the test window
     const events = await es.search({
-      index: 'longhorizons-events',
+      index: 'telemetry-events',
       body: {
         query: {
           bool: {
@@ -928,22 +928,22 @@ const worker = new Worker('atomic-execution', async (job) => {
       },
     });
 
-    const stableTokens: string[] = [];
+    const stableHashes: string[] = [];
     const seenHashes = new Set<string>();
 
     for (const hit of events.hits.hits) {
       const src = hit._source as any;
-      const hash = src.stable_hex || src.stable_token;
+      const hash = src.stable_hex || src.stable_hash;
       if (hash && !seenHashes.has(hash)) {
         seenHashes.add(hash);
-        stableTokens.push(hash);
+        stableHashes.push(hash);
       }
     }
 
     // Cross-reference with existing tokens
     const tokens = await Token.find({
-      stable_token: { $in: stableTokens },
-    }).select('_id stable_token enrichment_status').lean();
+      stable_hash: { $in: stableHashes },
+    }).select('_id stable_hash enrichment_status').lean();
 
     const tokenIds = tokens.map(t => t._id);
     const preEnriched = tokens.filter(t => t.enrichment_status === 'complete').length;
@@ -960,11 +960,11 @@ const worker = new Worker('atomic-execution', async (job) => {
           'executions.$.completed_at': new Date(),
           'executions.$.status': 'success',
           'executions.$.captured_event_count': (events.hits.total as any)?.value || 0,
-          'executions.$.captured_stable_tokens': stableTokens,
+          'executions.$.captured_stable_hashes': stableHashes,
           'executions.$.token_ids': tokenIds,
           coverage: {
             events_captured: (events.hits.total as any)?.value || 0,
-            tokens_generated: stableTokens.length,
+            tokens_generated: stableHashes.length,
             tokens_pre_enriched: preEnriched,
             tokens_new: newTokens,
             detection_gap: newTokens > 0,
@@ -1278,7 +1278,7 @@ export async function GET(req: NextRequest) {
 
   const [tokens, total] = await Promise.all([
     Token.find(filter)
-      .select('stable_token enrichment.short_description enrichment.risk_level rarity_band event_type total_occurrences')
+      .select('stable_hash enrichment.short_description enrichment.risk_level rarity_band event_type total_occurrences')
       .sort({ total_occurrences: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -1495,11 +1495,11 @@ ES_POLL_INTERVAL_SECONDS=10
 
 | Decision | Rationale |
 |---|---|
-| **MongoDB over PostgreSQL** | Token enrichment is deeply nested and variable-depth — one stable_token may have 2 MITRE techniques while another has 6. Document model avoids EAV pattern or sparse columns. Atlas Search provides built-in full-text search without Elasticsearch dependency for the web app itself. |
+| **MongoDB over PostgreSQL** | Token enrichment is deeply nested and variable-depth — one stable_hash may have 2 MITRE techniques while another has 6. Document model avoids EAV pattern or sparse columns. Atlas Search provides built-in full-text search without Elasticsearch dependency for the web app itself. |
 | **BullMQ over in-process queues** | LLM enrichment can take 5-30 seconds per token. 47 providers × thousands of events = many unique tokens on first run. Redis-backed queues survive restarts, provide dashboards, and support rate limiting to avoid overwhelming the local LLM. |
 | **Poll Elasticsearch, don't stream** | The LongHorizons agent already deduplicates and batches. Polling every 10 seconds is simpler than maintaining a persistent ES scroll, handles ES restarts gracefully, and the 10s latency is acceptable for enrichment (which itself takes seconds). |
-| **Markov first-order with N-order extension path** | First-order (bigram) captures 80% of predictive value at a fraction of the state space. The architecture supports N-order extension via the previous stable token chain in event sequences — the transition builder can be upgraded without schema changes. |
-| **Enrich once, cache forever** | The stable_token is cryptographically deterministic. The same hash always means the same behavior. Enriching it once and caching in MongoDB means the LLM cost per token is fixed, regardless of how many millions of times the behavior occurs. This is the central design insight of the entire system. |
+| **Markov first-order with N-order extension path** | First-order (bigram) captures 80% of predictive value at a fraction of the state space. The architecture supports N-order extension via the `prev_stable_hash` chain in event sequences — the transition builder can be upgraded without schema changes. |
+| **Enrich once, cache forever** | The stable_hash is cryptographically deterministic. The same hash always means the same behavior. Enriching it once and caching in MongoDB means the LLM cost per token is fixed, regardless of how many millions of times the behavior occurs. This is the central design insight of the entire system. |
 | **Separate search_cache collection** | SearXNG results change over time. A 7-day TTL with re-search ensures threat intel stays fresh without hammering the metasearch engine. |
 
 ---
@@ -1507,7 +1507,7 @@ ES_POLL_INTERVAL_SECONDS=10
 ## 13. Next Steps After Handoff
 
 1. **Verify LLM connectivity**: `curl http://192.168.0.133:31337/v1/models` — confirm the endpoint is reachable and see available models
-2. **Verify Elasticsearch connectivity**: Confirm `longhorizons-events` index exists and has data
+2. **Verify Elasticsearch connectivity**: Confirm `telemetry-events` index exists and has data
 3. **Stand up MongoDB + Redis**: Docker Compose in section 10.1
 4. **Scaffold Next.js project**: `npx create-next-app@latest windoh --typescript --tailwind --app`
 5. **Begin Phase 1 implementation**: Models → ES poll → Token ingestion → Basic UI

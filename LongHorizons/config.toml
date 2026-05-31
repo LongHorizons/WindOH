@@ -10,6 +10,9 @@
 #   [paths] + db_path, log_dir, state_dir
 #   [export.events] + endpoint = "http://es:9200"
 #
+# See CONFIG-GUIDE.md for a step-by-step walkthrough.
+# Search for CHANGEME — those are the fields you must set.
+#
 # =============================================================================
 
 
@@ -24,22 +27,15 @@
 id = "CHANGEME"
 
 # Windows service display name. Shown in services.msc.
-# Default: "LongHorizonsTelemetryAgent"
 service_name = "LongHorizonsTelemetryAgent"
 
 # Windows Event Log source name for agent diagnostics.
-# Default: "LongHorizonsTelemetryAgent"
 eventlog_source = "LongHorizonsTelemetryAgent"
 
 # Seconds between config file reloads (min 5).
 # Set high in production to avoid I/O noise; low during tuning.
 # Default: 60
 config_reload_seconds = 60
-
-# TCP port for the built-in health/status HTTP server.
-# GET http://127.0.0.1:8080/health returns JSON metrics.
-# Default: 8080
-health_port = 8080
 
 
 # ---------------------------------------------------------------------------
@@ -187,17 +183,17 @@ max_providers = 0
 
 
 # ---------------------------------------------------------------------------
-# [normalization] — How identifiers are handled for stable token generation
+# [normalization] — How identifiers are handled for base token generation
 # ---------------------------------------------------------------------------
 [normalization]
 
-# SID handling in stable tokens.
+# SID handling in base tokens.
 #   "map"      — Replace all SIDs with <sid> placeholder (deterministic tokens)
 #   "preserve" — Keep actual SIDs (tokens differ per user; useful for per-user baselines)
 # Default: "map"
 sid_handling = "map"
 
-# IP address handling in stable tokens.
+# IP address handling in base tokens.
 #   "map"      — Replace IPs with <ip> placeholder
 #   "preserve" — Keep actual IPs
 # Default: "map"
@@ -243,16 +239,16 @@ common_threshold = 50
 # Default: true
 pattern_export_daily = true
 
-# Number of top payload variants to retain per stable token.
+# Number of top payload variants to retain per base token.
 # Higher = more exemplar diversity, more storage.
 # Default: 10
 top_payload_k = 10
 
-# Reservoir size per stable token (exemplars retained).
+# Reservoir size per base token (exemplars retained).
 # Default: 3
-reservoir_size_per_base = 3
+reservoir_size_per_stable = 3
 
-# Days before refreshing exemplar events for a stable token.
+# Days before refreshing exemplar events for a base token.
 # Default: 7
 exemplar_refresh_days = 7
 
@@ -267,7 +263,7 @@ risk_score_threshold = 80
 # Default: 10
 export_threshold_score = 10
 
-# Days to wait before re-exporting the same event (by stable token).
+# Days to wait before re-exporting the same event (by base token).
 # 0 = disable dedup (every occurrence ships).
 # Default: 30
 export_dedup_days = 30
@@ -289,7 +285,7 @@ outbox_retention_seconds = 604800
 # [export.exemplars] — Exemplar event export pipeline
 # ---------------------------------------------------------------------------
 # Exemplars are individual representative events selected by the reservoir
-# sampler — one per stable token per rarity boundary cross.
+# sampler — one per base token per rarity boundary cross.
 # ---------------------------------------------------------------------------
 [export.exemplars]
 
@@ -314,9 +310,10 @@ api_key = "CHANGEME"
 # Default: false
 api_key_is_dpapi_protected = false
 
-# Elasticsearch index name pattern. Supports strftime placeholders.
-# Default: "longhorizons-exemplars"
-index_pattern = "longhorizons-exemplars"
+# Elasticsearch index name. Flat index, no date rotation.
+# Default: "telemetry-exemplars"
+
+index_pattern = "telemetry-exemplars"
 
 # Compress bulk requests with gzip.
 # Always enabled unless your ES proxy rejects compressed payloads.
@@ -339,7 +336,7 @@ timeout_seconds = 15
 # Default: 0
 event_rare_threshold = 0
 
-# Days before re-exporting the same exemplar stable token.
+# Days before re-exporting the same exemplar base token.
 # 0 = no dedup, always ship.
 # Default: 0
 event_dedup_days = 0
@@ -376,9 +373,10 @@ api_key = "CHANGEME"
 # Default: false
 api_key_is_dpapi_protected = false
 
-# Index name pattern.
-# Default: "longhorizons-events"
-index_pattern = "longhorizons-events"
+# Elasticsearch index name. Flat index, no date rotation.
+# Default: "telemetry-events"
+
+index_pattern = "telemetry-events"
 
 # Compress bulk requests.
 # Default: true
@@ -404,7 +402,7 @@ tls_pins_sha256 = []
 # Default: 10
 event_rare_threshold = 10
 
-# Days before re-exporting the same event (by stable token).
+# Days before re-exporting the same event (by base token).
 # Default: 30
 event_dedup_days = 30
 
@@ -412,7 +410,7 @@ event_dedup_days = 30
 # ---------------------------------------------------------------------------
 # [export.patterns] — Pattern/aggregation export pipeline
 # ---------------------------------------------------------------------------
-# Time-series pattern documents: aggregated statistics per stable token,
+# Time-series pattern documents: aggregated statistics per base token,
 # including count-min sketch frequencies, rarity band transitions,
 # and global/provider-level pattern summaries.
 # ---------------------------------------------------------------------------
@@ -434,9 +432,10 @@ api_key = "CHANGEME"
 # Default: false
 api_key_is_dpapi_protected = false
 
-# Fixed index name (overrides index_pattern when not time-series).
-# Default: "longhorizons-patterns"
-index_name = "longhorizons-patterns"
+# Fixed index name. Flat index, no date rotation.
+# Default: "telemetry-patterns"
+
+index_name = "telemetry-patterns"
 
 # Time-series index pattern (only used when time_series = true).
 # Supports strftime placeholders, e.g. "telemetry-patterns-%Y.%m.%d".
@@ -501,9 +500,10 @@ api_key = "CHANGEME"
 # Default: false
 api_key_is_dpapi_protected = false
 
-# Index name pattern.
-# Default: "longhorizons-diagnostics"
-index_pattern = "longhorizons-diagnostics"
+# Elasticsearch index name. Flat index, no date rotation.
+# Default: "telemetry-diagnostics"
+
+index_pattern = "telemetry-diagnostics"
 
 # Compress bulk requests.
 # Default: true
@@ -533,6 +533,7 @@ event_rare_threshold = 0
 # Default: 0
 event_dedup_days = 0
 
+
 # ---------------------------------------------------------------------------
 # [export.health] — Agent health report export pipeline
 # ---------------------------------------------------------------------------
@@ -559,8 +560,9 @@ api_key = "CHANGEME"
 api_key_is_dpapi_protected = false
 
 # Health report index name (single index, no date rotation).
-# Default: "longhorizons-health"
-index_pattern = "longhorizons-health"
+# Default: "telemetry-health"
+
+index_pattern = "telemetry-health"
 
 # Compress bulk requests.
 # Default: true

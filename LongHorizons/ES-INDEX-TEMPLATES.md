@@ -1,6 +1,34 @@
 # Elasticsearch Index Setup
 
-The agent exports to 4 index families. Create these templates before starting the agent to ensure correct type mappings and prevent the type conflicts that caused the 0.15% export success rate (4.9M errors) in early testing.
+The agent exports to 5 index families. Create these templates before starting the agent to ensure correct type mappings and prevent the type conflicts that caused the 0.15% export success rate (4.9M errors) in early testing.
+
+## Query Patterns — How the Indexes Work Together
+
+```mermaid
+flowchart LR
+    subgraph Investigation["Analyst Investigation Flow"]
+        Q1["🔍 Discover\nGET telemetry-events\nbehavior_tags:unusual_parent"] -->|
+        "Extract base_hash"| Q2["📊 Hunt\nGET telemetry-events\nterm: tokens.stable"]
+        Q2 -->|
+        "Extract pattern_id"| Q3["📈 Analyze\nGET telemetry-patterns\nterm: pattern_id"]
+        Q3 -->|
+        "Verify rarity"| Q4["📋 Confirm\nGET telemetry-exemplars\nterm: tokens.stable"]
+    end
+
+    subgraph Monitoring["Operations Monitoring"]
+        M1["🟢 Health\nGET telemetry-health\nlast 5 minutes"] --> DASH["Grafana / Kibana\nDashboard"]
+        M2["🔧 Diagnostics\nGET telemetry-diagnostics\nlevel: error"] --> DASH
+    end
+```
+
+**Query flow for threat hunting:**
+
+1. **Discover** in `telemetry-events` — find suspicious events by tag, type, or rarity
+2. **Hunt** in `telemetry-events` — query the `tokens.stable` hash across all hosts and time
+3. **Analyze** in `telemetry-patterns` — get frequency distributions, first/last seen, variant counts
+4. **Confirm** in `telemetry-exemplars` — see the actual event details that triggered the exemplar
+
+**For monitoring:** `telemetry-health` provides real-time agent metrics (events/sec, export success rate, DB size). `telemetry-diagnostics` captures errors and warnings for alerting.
 
 ## Critical: Provider Properties Type Safety
 
@@ -10,14 +38,14 @@ The agent now **stringifies all `provider_properties` leaf values** before expor
 
 ## Index Templates
 
-### telemetry-events-*
+### telemetry-events
 
 Primary event feed — individual telemetry events with full enrichment.
 
 ```json
 PUT _index_template/telemetry-events
 {
-  "index_patterns": ["telemetry-events-*"],
+  "index_patterns": ["telemetry-events"],
   "template": {
     "settings": {
       "number_of_shards": 3,
@@ -247,7 +275,7 @@ PUT _index_template/telemetry-events
 
         "tokens": {
           "properties": {
-            "base": { "type": "keyword" },
+            "stable": { "type": "keyword" },
             "payload": { "type": "keyword" },
             "schema_version": { "type": "integer" },
             "base_canonical": { "type": "text" },
@@ -311,14 +339,14 @@ PUT _index_template/telemetry-events
 
 ---
 
-### telemetry-exemplars-*
+### telemetry-exemplars
 
-Representative event samples per stable token.
+Representative event samples per base token.
 
 ```json
 PUT _index_template/telemetry-exemplars
 {
-  "index_patterns": ["telemetry-exemplars-*"],
+  "index_patterns": ["telemetry-exemplars"],
   "template": {
     "settings": {
       "number_of_shards": 1,
@@ -350,7 +378,7 @@ PUT _index_template/telemetry-exemplars
           }
         },
         "event_type": { "type": "keyword" },
-        "tokens.base": { "type": "keyword" },
+        "tokens.stable": { "type": "keyword" },
         "tokens.payload": { "type": "keyword" }
       }
     }
@@ -415,7 +443,7 @@ PUT _index_template/telemetry-patterns
             "agent_version": { "type": "keyword" }
           }
         },
-        "tokens.base": { "type": "keyword" }
+        "tokens.stable": { "type": "keyword" }
       }
     }
   }
@@ -460,6 +488,73 @@ PUT _index_template/telemetry-diagnostics
 
 ---
 
+### telemetry-health
+
+Periodic agent health reports and metrics.
+
+```json
+PUT _index_template/telemetry-health
+{
+  "index_patterns": ["telemetry-health"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "refresh_interval": "30s"
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "doc_type": { "type": "keyword" },
+        "host": {
+          "properties": {
+            "id": { "type": "keyword" },
+            "name": { "type": "keyword" },
+            "os_version": { "type": "keyword" }
+          }
+        },
+        "agent": {
+          "properties": {
+            "version": { "type": "keyword" },
+            "uptime_seconds": { "type": "long" },
+            "events_seen": { "type": "long" },
+            "events_per_second": { "type": "float" },
+            "tokens_ingested": { "type": "long" },
+            "base_tokens": { "type": "long" },
+            "payload_tokens": { "type": "long" }
+          }
+        },
+        "etw": {
+          "properties": {
+            "session_active": { "type": "boolean" },
+            "restart_count": { "type": "integer" }
+          }
+        },
+        "export": {
+          "properties": {
+            "es_reachable": { "type": "boolean" },
+            "outbox_pending": { "type": "integer" },
+            "sent_total": { "type": "long" },
+            "failed_total": { "type": "long" },
+            "success_rate": { "type": "float" }
+          }
+        },
+        "database": {
+          "properties": {
+            "size_bytes": { "type": "long" },
+            "wal_bytes": { "type": "long" },
+            "base_tokens_count": { "type": "long" },
+            "payload_tokens_count": { "type": "long" }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
 ## The `dynamic_templates` Fix
 
 The critical addition is the `dynamic_templates` block in every index:
@@ -490,4 +585,45 @@ Combined with the agent-side fix (all provider_properties values stringified in 
 
 ---
 
-*Document updated 2026-05-29 — Reflects data quality overhaul with stringified provider_properties and type-safe index templates*
+## ILM Strategy (Index Lifecycle Management)
+
+Since all indexes use flat names (no date rotation), use ILM policies based on **index age + size** rather than date-based rollover:
+
+```json
+PUT _ilm/policy/telemetry-hot-delete
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "min_age": "0ms",
+        "actions": {
+          "rollover": {
+            "max_primary_shard_size": "50gb",
+            "max_age": "30d"
+          }
+        }
+      },
+      "delete": {
+        "min_age": "90d",
+        "actions": { "delete": {} }
+      }
+    }
+  }
+}
+```
+
+**Recommended retention by index:**
+
+| Index | Retention | Rationale |
+|-------|-----------|-----------|
+| `telemetry-events` | 30–90 days | High volume; rare events stay, common events are counters |
+| `telemetry-exemplars` | 90–180 days | Low volume, high value — keep longer for investigations |
+| `telemetry-patterns` | 180+ days | Behavioral baselines gain value over time |
+| `telemetry-diagnostics` | 30 days | Operational data, short retention |
+| `telemetry-health` | 90 days | Low volume, useful for capacity planning |
+
+**Note:** Since the agent deduplicates before ES ingest, the `telemetry-events` index grows by **unique behavioral patterns**, not raw event count. A week of "normal" activity generates very few new documents once the baseline stabilizes. The first 24–48 hours on a new endpoint generate the most documents as the agent discovers the system's behavioral inventory.
+
+---
+
+*Document updated 2026-05-31 — Added query patterns diagram, ILM strategy, corrected index count; fixed token field name (base→stable) across all templates*

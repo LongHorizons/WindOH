@@ -6,7 +6,7 @@
 graph TB
     subgraph Binary["agent-service (binary)"]
         main["main.rs — CLI + Windows Service"]
-        health["health.rs — HTTP health endpoint"]
+        health["health.rs — ES health reporting"]
         diagnostic["diagnostic.rs — self-monitoring"]
     end
 
@@ -76,7 +76,7 @@ flowchart LR
         H --> L["classify_fields() — pattern match on TDH property names"]
         K --> L
         L --> M["infer_event_type() — provider-aware type inference"]
-        M --> N["38 event types recognized"]
+        M --> N["49 event types recognized"]
     end
 
     subgraph Phase4["Phase 4: Enrichment"]
@@ -90,10 +90,10 @@ flowchart LR
     end
 
     subgraph Phase5["Phase 5: Tokenization"]
-        U --> V["build_tokens() — 38 type-specific builders"]
+        U --> V["build_tokens() — 49 type-specific builders"]
         V --> W["sanitize_token_value() — reject AAA=, hex pointers, numeric IDs"]
-        W --> X["stable_token = SHA-256(behavior skeleton)"]
-        W --> Y["payload_token = SHA-256(behavior + details)"]
+        W --> X["base_hash = SHA-256(behavior skeleton)"]
+        W --> Y["payload_hash = SHA-256(behavior + details)"]
     end
 
     subgraph Phase6["Phase 6: Baselining"]
@@ -152,7 +152,7 @@ flowchart TD
     V3 -->|no| FIELDS
     V4 -->|yes| FIELDS
 
-    FIELDS --> INFER["infer_event_type(event, provider_hint)\n38 types: dns_query, registry, file,\nnetwork_connect, wmi, image_load,\nantimalware, com_classic, rpcss,\ncapi2, ntfs, win32k, schannel,\nappmodel, shell_core, system_trace,\nmemory_operation, power_state,\nboot_event, bits_client,\nfilter_manager, dotnet_runtime,\nwininet, winhttp, service,\nsmb_client, vbscript,\ntask_scheduler, applocker,\ndefender*, threat_intelligence,\nprocess_forensic, thread_operation,\nprocess_start/end/operation,\ngeneric"]
+    FIELDS --> INFER["infer_event_type(event, provider_hint)\n49 types: dns_query, registry, file,\nnetwork_connect, wmi, image_load,\nantimalware, com_classic, rpcss,\ncapi2, ntfs, win32k, schannel,\nappmodel, shell_core, system_trace,\nmemory_operation, power_state,\nboot_event, bits_client,\nfilter_manager, dotnet_runtime,\nwininet, winhttp, service,\nsmb_client, vbscript,\ntask_scheduler, applocker,\ndefender*, threat_intelligence,\nbrowser_history, browser_download,\nregistry_snapshot_diff, process_forensic,\nthread_operation, process_start/end/operation,\ngeneric"]
 
     FIELDS --> DESC["Description Enrichment\nevent_name = get_event_name()\nseverity = get_severity_name()\ncategory = get_category_name()\ndescription_raw = formatted summary"]
 ```
@@ -235,11 +235,11 @@ flowchart TD
     SPEC --> BASE
     GEN --> BASE
 
-    BASE --> HASH1["SHA-256 → stable_token\n'What behavior happened?'"]
+    BASE --> HASH1["SHA-256 → base_hash\n'What behavior happened?'"]
     BASE --> PAYLOAD["+ variable fields\n(command_line, specific IPs,\nvalues, SID, timestamps)"]
-    PAYLOAD --> HASH2["SHA-256 → payload_token\n'What were the exact details?'"]
+    PAYLOAD --> HASH2["SHA-256 → payload_hash\n'What were the exact details?'"]
 
-    HASH1 --> TOKEN["TokenPair { stable_token, payload_token,\nbase_canonical_json, payload_canonical_json }"]
+    HASH1 --> TOKEN["TokenPair { base_hash, payload_hash,\nbase_canonical_json, payload_canonical_json }"]
     HASH2 --> TOKEN
 ```
 
@@ -250,7 +250,7 @@ flowchart TD
 ```mermaid
 erDiagram
     BASE_TOKENS {
-        blob stable_token PK "32-byte SHA-256"
+        blob base_hash PK "32-byte SHA-256"
         text event_type "process_start, dns_query, etc."
         text provider "ETW provider name"
         int event_id
@@ -264,8 +264,8 @@ erDiagram
     }
 
     PAYLOAD_VARIANTS {
-        blob payload_token PK "32-byte SHA-256"
-        blob stable_token FK "Links to BASE_TOKENS"
+        blob payload_hash PK "32-byte SHA-256"
+        blob base_hash FK "Links to BASE_TOKENS"
         blob payload_canonical "Variable-detail JSON"
         int exact_count "Exact observation count"
         real decay_score
@@ -292,7 +292,7 @@ erDiagram
     }
 
     EXPORT_STATE {
-        blob stable_token PK
+        blob base_hash PK
         int last_exemplar_unix
         blob last_exemplar_payload
         int last_pattern_unix
@@ -314,7 +314,6 @@ flowchart TB
         ETW["ETW Session Start"]
         EXP["Exporter Worker (tokio)"]
         CFG["Config Reload Watcher"]
-        HTTP["Health HTTP Server :8080"]
     end
 
     subgraph Callback["ETW Callback Thread (high frequency)"]
@@ -390,15 +389,83 @@ The agent ships with **maximum data collection** defaults:
 | Setting | Default | Notes |
 |---------|---------|-------|
 | Provider mode | `all` | Auto-discovers every registered ETW provider |
-| Semantic mode | `true` | Provider-agnostic field classification |
-| Allow raw fields | `true` | Include raw TDH properties in ES documents |
+| Allow raw fields | `false` | Raw TDH properties excluded from ES documents |
 | Gzip | `true` | Compress _bulk requests |
 | Decay half-life | 30 days | Recency weighting for rarity scoring |
-| Reservoir size | 100 per stable token | Exemplar samples retained |
+| Reservoir size | 3 per base token | Exemplar samples retained |
 | Shard count | 8 | Independent baselining pipelines |
 | Process cache size | 2,000 | PID → identity lookups |
 | Promoted payload cache | 100,000 | Exact counting threshold |
 
 ---
 
-*Document updated 2026-05-29 — Reflects v0.1.0 architecture with data quality overhaul*
+## Deployment Scale
+
+```mermaid
+flowchart TB
+    subgraph Single["Single Host — Standalone"]
+        S1["agent.exe run"] --> S2["Local SQLite\nWAL mode"]
+        S2 --> S3["Local ES export"]
+    end
+
+    subgraph Fleet["Fleet — 1,000+ Endpoints"]
+        F1["Endpoint 1\nagent.exe (service)"] --> ES["Elasticsearch\nCluster"]
+        F2["Endpoint 2\nagent.exe (service)"] --> ES
+        F3["Endpoint N\nagent.exe (service)"] --> ES
+        ES --> KIBANA["Kibana\nDashboards + Alerting"]
+        ES --> ML["ML Pipeline\nLLM Fine-tuning\nAnomaly Detection"]
+    end
+
+    Single -.->|"Same binary\nSame config format\nSame token determinism"| Fleet
+```
+
+**Scaling properties:**
+
+| Property | Value | Why |
+|----------|-------|-----|
+| **Per-host CPU** | ~2–5% of one core | Single-threaded pipeline, ETW callback is kernel-mode |
+| **Per-host RAM** | ~50–150 MB | Process cache (2K entries), CMS sketches (fixed size), SQLite page cache |
+| **Per-host disk I/O** | ~5–20 MB/hour writes | SQLite WAL + log rotation, compressed tokens |
+| **Network to ES** | ~1–10 MB/hour | gzip bulk export, deduplication before send |
+| **Cross-host determinism** | Guaranteed | SID/IP normalization → identical base_hash regardless of host |
+| **ES cluster load** | O(unique behaviors) not O(total events) | Dedup at edge before ES ingestion |
+| **1,000 hosts → ES** | ~1–10 GB/hour ingest | Depends on behavioral diversity, not event volume |
+
+**Why this scales:** Each endpoint does the expensive work locally — sanitization, tokenization, baselining, deduplication. ES only sees pre-digested documents. A 1,000-endpoint fleet sends roughly the same ES ingest volume as ~5–10 endpoints running raw log forwarding.
+
+---
+
+## Competitive Differentiation
+
+```mermaid
+flowchart LR
+    subgraph Traditional["Traditional SIEM / Log Forwarding"]
+        T1["Windows Event Log\nForwarding"] --> T2["SIEM Collector\n(beats, nxlog, winlogbeat)"]
+        T2 --> T3["SIEM Indexer\nElastic, Splunk"]
+        T3 --> T4["Analyst\n'What happened?'"]
+    end
+
+    subgraph LH["LongHorizons"]
+        L1["ETW Kernel Traces\n200+ providers"] --> L2["Edge Compute\nSanitize → Tokenize → Baseline"]
+        L2 --> L3["ES: Unique behaviors only\nDedup before ingest"]
+        L3 --> L4["Analyst\n'Has this ever happened before?'"]
+    end
+
+    T4 -.->|"Hours of searching"| T4
+    L4 -.->|"Instant answer"| L4
+```
+
+| Dimension | Traditional SIEM | LongHorizons |
+|-----------|-----------------|--------------|
+| **Data source** | Windows Event Log (handful of channels) | ETW kernel + user-mode traces (200+ providers) |
+| **Coverage** | Security (4624/4688), System, Application | Process, thread, network, file, registry, memory, DNS, WMI, Defender, PowerShell, Schannel, RPC, COM, CAPI2, AppLocker, Hyper-V... |
+| **Storage model** | Store every event | Store unique behaviors, count duplicates |
+| **Behavioral identity** | None — join on unstructured text | Deterministic SHA-256 base_hash |
+| **Novelty detection** | Manual hunting | Pre-computed rarity band per event |
+| **Cross-host correlation** | Regex/string match on hostname + path | Term query on base_hash across entire fleet |
+| **ML pipeline readiness** | 60–80% of project time = data engineering | Zero preprocessing required |
+| **Kernel visibility** | None (Event Log is user-mode) | Full kernel trace: thread scheduling, memory ops, IRPs, DPCs |
+
+---
+
+*Document updated 2026-05-31 — Added deployment scale, competitive differentiation, throughput analysis; corrected event type count (49), removed stale semantic_mode config field*
