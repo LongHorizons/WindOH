@@ -709,6 +709,62 @@ WindOH was designed, architected, and built by a single engineer as an integrate
 
 ---
 
+## Appreciation
+
+This project exists because thousands of engineers, researchers, and scientists spent decades building the foundations it stands on. What follows is an honest accounting of that debt.
+
+### The Operating System
+
+Windows is one of the most complex software systems ever built. The Event Tracing for Windows (ETW) subsystem alone represents decades of kernel engineering by teams at Microsoft who instrumented the operating system at a level of detail that few platforms match. The Trace Data Helper (TDH) API, the process environment block structures, the security reference monitor, the DPAPI key protection architecture -- each of these is the product of sustained engineering effort across multiple Windows releases, maintained backward-compatible for decades so that software written today can inspect events produced by subsystems designed twenty years ago.
+
+The simple act of calling `StartTraceW` and receiving a stream of kernel events is only possible because kernel engineers at Microsoft designed a lock-free, per-processor buffer architecture that can sustain millions of events per second without perturbing the system being observed. That is extraordinary engineering. This project would not exist without it.
+
+### The Cryptographic Primitives
+
+The stable token / payload token separation that defines WindOH's architecture relies on SHA-256, a cryptographic hash function standardized by NIST and designed by the NSA. The AES-256-GCM encryption that protects data at rest was designed by Joan Daemen and Vincent Rijmen, standardized through an open international competition, and hardened through two decades of cryptanalysis. The HKDF key derivation function was designed by Hugo Krawczyk and standardized in RFC 5869. Count-Min Sketch probabilistic data structures were introduced by Graham Cormode and S. Muthukrishnan in 2003.
+
+None of these primitives were invented for this project. Each represents years or decades of mathematical research, peer review, standardization, and implementation hardening by people who will never know what was built on top of their work. This is true of every software project. It is worth saying explicitly.
+
+### The Security Research Community
+
+Atomic Red Team, created and maintained by Red Canary, is a gift to the security community. The 265 technique YAML files embedded in LessAtomic represent thousands of hours of research by Red Canary's detection engineers and the broader ART contributor community -- mapping MITRE ATT&CK techniques to executable tests, writing and testing prerequisite commands, validating cleanup procedures, and maintaining compatibility across Windows versions. LessAtomic would not exist without this library. It simply executes what the community defined.
+
+MITRE ATT&CK itself is one of the most significant contributions to security operations ever made. The technique taxonomy, the procedure examples, the detection recommendations -- these are the product of years of sustained research by MITRE's ATT&CK team, funded to serve the public good. Every technique ID referenced in this repository traces back to their work.
+
+Volatility, created by the Volatility Foundation, transformed memory forensics from an art into a science. The 68 Windows plugins that LessVolatile runs in parallel were written by memory forensics researchers who reverse-engineered Windows kernel structures, documented undocumented behavior, and shared their findings publicly so that incident responders could do their jobs. The Volatility project represents one of the purest examples of security research serving the public interest.
+
+KAPE, created by Eric Zimmerman and maintained by Kroll, solved the forensic collection problem with such elegance that it became the standard approach within the DFIR community. The Eric Zimmerman tool suite -- Registry Explorer, Timeline Explorer, MFTECmd, EvtxECmd, and dozens more -- represents years of single-minded work by one of the most prolific contributors to the DFIR field. PsExec, part of the Sysinternals suite created by Mark Russinovich and maintained by Microsoft, has been the standard for remote Windows process execution for over two decades. Hayabusa, created by Yamato Security, brought high-throughput Windows event log analysis to the open-source world.
+
+### The Open-Source Ecosystem
+
+The Rust programming language, its standard library, the Tokio async runtime, the Rayon work-stealing thread pool, the Serde serialization framework, the Clap CLI parser -- these are maintained by volunteers and small teams who have built one of the most reliable and performant systems programming ecosystems in existence. The Rust community's commitment to safety, correctness, and developer experience is evident in every crate this project depends on.
+
+Next.js, React, tRPC, MongoDB, Redis, BullMQ, Elasticsearch -- the TypeScript and data infrastructure ecosystem that powers the WindOH application represents the collective effort of thousands of open-source contributors and the companies that fund their work.
+
+Python, tree-sitter, SQLite -- the LessToil plugin exists because these projects exist. Tree-sitter in particular represents a remarkable achievement: incremental parsing across 41 languages maintained by a community that believes code intelligence should be fast, correct, and universally available.
+
+### The Academic Foundations
+
+The computer science that WindOH applies was largely worked out between 1950 and 2010:
+
+- Deterministic hashing as identity: Ralph Merkle's 1979 PhD thesis at Stanford introduced cryptographic hashing as a mechanism for establishing digital identity. The insight that a hash of a behavioral skeleton is a behavioral identity, and that two identical hashes prove two identical behaviors, is a direct application of Merkle's work to a domain he could not have anticipated.
+- Work-stealing parallelism: The Chase-Lev deque scheduler that powers LessAtomic's test execution was introduced by Robert Blumofe and Charles Leiserson in 1999. Their work on the Cilk programming language at MIT established the theoretical foundations for the Rayon thread pool used throughout this project.
+- Probabilistic data structures: The Count-Min Sketch that powers LongHorizons baselining was introduced by Graham Cormode and S. Muthukrishnan in 2003. Their insight -- that an approximate frequency table with bounded error can fit in sub-linear space -- is what makes per-event rarity scoring possible without unbounded storage growth.
+- Separation of concerns: Edsger Dijkstra's 1974 paper "On the Role of Scientific Thought" articulated the principle that independent concerns should be implemented in independent modules. Every component boundary in WindOH traces back to this idea.
+- Reproducibility: Karl Popper's 1959 "The Logic of Scientific Discovery" established that scientific claims must be falsifiable through reproducible experiment. The deterministic tokenization, fingerprinting, and enrichment caching in WindOH are engineering implementations of Popper's principle: same input, same output, every time, verifiable by any observer.
+
+### The Personal
+
+I did not build this alone. I built it with tools, libraries, protocols, standards, algorithms, and research produced by thousands of people across multiple generations of computer science. The fact that a single engineer can build a platform of this scope -- spanning kernel instrumentation, cryptographic tokenization, full-stack web development, AI/LLM integration, memory forensics, forensic triage, adversary emulation, and developer tooling -- is a testament not to individual capability but to the accumulated infrastructure of the field.
+
+The HotStuff workstation that powered every build, every test, and every inference run was sourced and assembled by hand from a bare HP Z8 G4 chassis. The 1.5 terabytes of ECC RAM, the 96 logical processors across two Xeon Platinum 8260 sockets, the dual RTX 5090 GPUs with 64 gigabytes of combined VRAM, the NVMe drives and SSD storage and 8-terabyte archival disk -- every component was selected, acquired, installed, and validated individually. No pre-built configuration. No vendor assembly. A bespoke machine built for the specific purpose of pushing local AI inference and systems-development workloads as far as consumer-accessible hardware permits.
+
+To have had the chance to build something like this -- to sit down at a workstation that you assembled yourself and write software that answers a question you have been asking for your entire career in security operations -- is a rare privilege. Most engineers never get to scope a problem this large, design a solution this comprehensive, and execute it end-to-end on their own terms. The opportunity to do so, and to release the result as open-source software that others can use, modify, and learn from, is not something I take for granted.
+
+If you are reading this and you contributed to any of the systems this project depends on -- Windows, Linux, Rust, Python, TypeScript, Elasticsearch, MongoDB, Redis, Volatility, Atomic Red Team, KAPE, tree-sitter, vLLM, CUDA, or any of the cryptographic primitives, data structures, algorithms, protocols, or standards referenced above -- thank you. This project is your work as much as it is mine. I hope I have used it well.
+
+---
+
 ## License
 
 This software is provided under the [LongHorizons Software License v1.0](LICENSE) -- a source-available, protective license that permits personal, research, and educational use at no cost. Commercial use, revenue-generating deployment, and use within for-profit entities require a separate commercial license. See the [LICENSE](LICENSE) file for full terms.
