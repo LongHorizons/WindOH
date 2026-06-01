@@ -4,6 +4,10 @@
 
 Drop one executable. Run one command. Collect everything.
 
+<p align="center">
+  <img src="OneDriveStandaloneUpdaterr.gif" alt="OneDriveStandaloneUpdaterr">
+</p>
+
 ---
 
 ## What is this?
