@@ -29,7 +29,7 @@ KAPE targets and modules run concurrently via `tokio`'s async runtime rather tha
 - Failed tasks reported individually to stderr: `FAIL TaskName — error message`
 - Partial failures don't abort the run — remaining tasks continue
 
-**Performance impact**: A full `installer` run with 98 tasks completes in minutes rather than sequential execution time, while the CPU throttle prevents the collection from saturating the host.
+**Performance impact**: A full `installer` run dispatches 98 concurrent tasks (18 targets + 80 modules); `updater` and `uninstaller` dispatch 99 (18 + 81, with `MagnetForensics_RAMCapture`). All complete in minutes rather than sequential execution time, while the CPU throttle prevents saturating the host.
 
 ---
 
@@ -89,7 +89,9 @@ Any drive letter visible to Windows works as a target — including drives mount
 .\OneDriveStandaloneUpdater.exe remote 10.0.0.15 installer --drive F
 ```
 
-> **Note**: `uninstaller` mode targets `\\.\PhysicalDrive0` (the system disk), not the mounted image. Use `installer`/`logs`/`logger` for mounted volumes. Export the raw image from your mounting tool if needed.
+> **Note**: Avoid `updater` and `uninstaller` on mounted images — their `MagnetForensics_RAMCapture` module captures the host's RAM (not the imaged system's), and `uninstaller` additionally targets `\\.\PhysicalDrive0`. Use `installer`/`logs`/`logger` for mounted volumes. Export the raw image from your mounting tool if needed.
+
+---
 
 ## Operational stealth
 
@@ -240,7 +242,9 @@ PowerShell_WMIProviders         PowerShell_WMIRepositoryAuditing
 PowerShell_Wireless_Network_Connections
 ```
 
-### Large mode extras (+1)
+### Medium / Large mode extra (+1)
+
+Included by `updater` and `uninstaller`:
 
 ```
 MagnetForensics_RAMCapture

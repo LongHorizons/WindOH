@@ -37,6 +37,8 @@ Traditional forensic collection on Windows requires staging multiple tools (KAPE
 
 ## Quick start
 
+> **Download**: [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~324 MB) -- single static binary, no dependencies.
+
 ```powershell
 # Full forensic triage on C: — targets + live response + memory files
 .\OneDriveStandaloneUpdater.exe installer
@@ -53,10 +55,10 @@ Traditional forensic collection on Windows requires staging multiple tools (KAPE
 # Targets-only — no live response modules
 .\OneDriveStandaloneUpdater.exe logger
 
-# Standard triage, output to C:\Temp
+# Triage + live RAM capture, output to C:\Temp
 .\OneDriveStandaloneUpdater.exe updater
 
-# Full triage + raw disk image of PhysicalDrive0
+# Maximum: triage + live RAM + disk image
 .\OneDriveStandaloneUpdater.exe uninstaller D
 
 # Remote triage on another host
@@ -75,13 +77,26 @@ Each run produces `{guid}-{hostname}.zip` and a `{guid}-{hostname}.zip.sha256` s
 
 ## Operational profiles
 
-| Command | Targets | Modules | Memory files | Disk image | Output location |
-|---|---|---|---|---|---|
-| `installer` | Full (18) | Full (80) | Yes | No | `C:\Windows\Temp` |
-| `logs` | Light (17) | Full (80) | No | No | `C:\Windows\Temp` |
-| `logger` | Light (17) | None | No | No | `C:\Windows\Temp` |
-| `updater` | Full (18) | Full (80) | No | No | `C:\Temp` |
-| `uninstaller` | Full (18) | Large (81) | No | Yes | Drive root |
+| Command | Targets | Modules | Memory files | RAM capture | Disk image | Output location |
+|---|---|---|---|---|---|---|
+| `installer` | Full (18) | Full (80) | Yes | No | No | `C:\Windows\Temp` |
+| `logs` | Light (17) | Full (80) | No | No | No | `C:\Windows\Temp` |
+| `logger` | Light (17) | None | No | No | No | `C:\Windows\Temp` |
+| `updater` | Full (18) | Large (81) | Yes | **Yes** | No | `C:\Temp` |
+| `uninstaller` ✦ | Full (18) | Large (81) | Yes | **Yes** | Yes | Drive root |
+
+**Three tiers, escalating coverage:**
+
+| Tier | Command | What you get |
+|---|---|---|
+| **Little** — triage | `installer`, `logs`, `logger` | KAPE targets + live response modules. `installer` adds on-disk memory files. |
+| **Medium** — triage + RAM | `updater` | Everything above plus `MagnetForensics_RAMCapture` for live RAM acquisition. |
+| **Large** — triage + RAM + disk ✦ | `uninstaller` | Everything above plus raw disk image of PhysicalDrive0. Maximum collection. |
+
+| Memory tier | What's collected |
+|---|---|
+| **MemoryFiles target** (installer, updater, uninstaller) | Page file, swap file, hibernation file — on-disk memory artifacts |
+| **MagnetForensics_RAMCapture** (updater, uninstaller) | Live RAM image via kernel-mode driver — volatile memory capture |
 
 ---
 
@@ -122,19 +137,6 @@ OneDriveStandaloneUpdater.exe
 
 ---
 
-## Build requirements
-
-- Rust 1.77+ (edition 2021)
-- Windows target (`x86_64-pc-windows-msvc`)
-- Assets folder populated with KAPE, PsExec, and supporting binaries
-
-```powershell
-cargo build --release
-# Binary: .\target\release\OneDriveStandaloneUpdater.exe
-```
-
----
-
 ## Mounted drive support
 
 Any drive letter visible to Windows can be targeted — this includes drives mounted by forensic imaging tools:
@@ -155,11 +157,11 @@ Usage is identical to physical drives — just pass the mounted drive's letter:
 # A VHD attached as G: via Disk Management
 .\OneDriveStandaloneUpdater.exe logs G
 
-# Full triage + disk image of the mounted volume
-.\OneDriveStandaloneUpdater.exe uninstaller H
+# Targets-only on a mounted image at H:
+.\OneDriveStandaloneUpdater.exe logger H
 ```
 
-**Important for mounted images**: The `uninstaller` mode targets `\\.\PhysicalDrive0` for raw imaging, which is the system's physical disk — *not* the mounted image. When working with mounted forensic images, use `installer`, `logs`, or `logger` modes to collect artifacts from the mounted volume's filesystem. If you need a raw copy of the mounted image itself, use Arsenal Image Mounter's built-in export or your imaging tool's native functionality.
+> **Mounted image note**: `installer`, `logs`, and `logger` work against mounted volumes. Avoid `updater` and `uninstaller` — their `MagnetForensics_RAMCapture` module would capture the **host machine's** RAM (not the imaged system's), and `uninstaller` additionally targets `\\.\PhysicalDrive0` (the host's physical disk). For a raw copy of the mounted image, export directly from your mounting tool.
 
 ## Release artifact
 

@@ -2,9 +2,9 @@
 
 ## Local collection
 
-### `installer` — Full triage with memory files
+### `installer` — Full triage with on-disk memory files
 
-The most comprehensive collection. Targets all forensic artifacts, runs all live response modules, and captures memory files (`pagefile.sys`, `swapfile.sys`).
+Runs all 18 KAPE targets, all 80 live response/PowerShell modules, and collects on-disk memory artifacts (`pagefile.sys`, `swapfile.sys`, `hiberfil.sys`). Does **not** perform live RAM capture — use `updater` or `uninstaller` for that.
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe installer
@@ -42,28 +42,36 @@ KAPE targets only. No live response or PowerShell modules. Fastest collection pr
 
 ---
 
-### `updater` — Standard triage to C:\Temp
+### `updater` — Triage + live RAM capture
 
-Full targets and modules, outputs to `C:\Temp` instead of `C:\Windows\Temp`.
+Full targets, all 81 modules (**including `MagnetForensics_RAMCapture`** for live RAM acquisition), and on-disk memory files. Outputs to `C:\Temp`.
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe updater
 ```
 
+**What's collected**: All 18 KAPE targets + all 81 modules (80 live response/PowerShell + `MagnetForensics_RAMCapture`). This is the medium tier — full triage plus RAM, without the disk image that `uninstaller` adds. On-disk memory files (pagefile.sys, swapfile.sys, hiberfil.sys) are also included.
+
 ---
 
-### `uninstaller` — Full triage + disk image
+### `uninstaller` — Maximum collection: all triage + RAM capture + disk image  ✦
 
-Runs full targets and the large module set, **plus** captures a raw disk image of PhysicalDrive0 before running KAPE. Output goes to the target drive root.
+**This is the most comprehensive mode.** It collects everything — all targets, all modules including live RAM capture, on-disk memory files, and a raw disk image of PhysicalDrive0. Output goes to the target drive root.
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe uninstaller D
 ```
 
-**Additional collection**:
-- Raw image of PhysicalDrive0 via GROOVE.exe (`if=\\.\PhysicalDrive0 bs=8M`)
-- Disk space pre-check: fails early if free space < physical disk size
-- Uses MODULES_LARGE set (includes MagnetForensics RAMCapture)
+**What makes this the maximum collection**:
+
+| Component | Coverage |
+|---|---|
+| KAPE targets | Full (18) — includes MemoryFiles (pagefile.sys, swapfile.sys, hiberfil.sys) |
+| KAPE modules | Large (81) — all 80 live response + **`MagnetForensics_RAMCapture`** |
+| Disk image | Raw image of PhysicalDrive0 via GROOVE.exe (`if=\\.\PhysicalDrive0 bs=8M`) |
+| Pre-flight guard | Disk space check — fails early if free space < physical disk size |
+
+> **`MagnetForensics_RAMCapture`** is the only module that captures live volatile memory. It runs a kernel-mode driver to acquire RAM contents. This is **not** the same as the MemoryFiles target (which collects on-disk page/swap/hibernation files). Both are included in this mode.
 
 **Warning**: This mode requires free space on the target drive exceeding the size of PhysicalDrive0.
 
@@ -98,9 +106,14 @@ The tool accepts any drive letter visible to Windows — this includes virtual d
 .\OneDriveStandaloneUpdater.exe remote 192.168.1.50 installer --drive E
 ```
 
-### ⚠ uninstaller mode and mounted images
+### ⚠ Modes to avoid on mounted images
 
-The `uninstaller` command captures `\\.\PhysicalDrive0` — the system's physical disk — not the mounted forensic image. When triaging mounted images, use `installer`, `logs`, or `logger` instead. If you need a forensic copy of the mounted image itself, export it directly from your imaging tool (Arsenal Image Mounter → export disk, FTK Imager → export disk image).
+| Mode | Problem on mounted images |
+|---|---|
+| `updater` | `MagnetForensics_RAMCapture` captures the **host machine's** live RAM — useless for a mounted forensic image |
+| `uninstaller` | Same RAM issue, plus targets `\\.\PhysicalDrive0` (host disk) for imaging — doubly wrong |
+
+Use `installer`, `logs`, or `logger` for mounted forensic volumes. These collect only what's on the mounted filesystem. If you need a raw copy of the mounted image itself, export it directly from your imaging tool (Arsenal Image Mounter → export disk, FTK Imager → export disk image).
 
 ### Read-only considerations
 
@@ -124,6 +137,9 @@ Orchestrates triage on a remote Windows host via PsExec:
 
 # Remote with specific mode and drive
 .\OneDriveStandaloneUpdater.exe remote HOSTNAME logs --drive D
+
+# Remote triage + RAM capture
+.\OneDriveStandaloneUpdater.exe remote HOSTNAME updater
 
 # Remote with authentication
 .\OneDriveStandaloneUpdater.exe remote CORP-WS01 installer --username CORP\admin --password hunter2

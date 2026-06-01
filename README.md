@@ -362,14 +362,19 @@ TDH property extraction
 
 **TypeScript/Next.js. MongoDB + Redis + local LLM.**
 
-> **WindOH.us** -- A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow will be available at [windoh.us](https://windoh.us) in the coming days. It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
+> **WindOH.us** -- A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow is available at [windoh.us](https://windoh.us). It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
 
-Polls Elasticsearch for new telemetry, upserts each stable token into MongoDB, and queues unknown tokens for LLM enrichment via BullMQ. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) -- no external API calls, no data leaving the environment.
+Polls Elasticsearch for new telemetry, normalizes events to a canonical origin-agnostic schema, deduplicates by payload token, and queues unknown tokens for LLM enrichment via eight named BullMQ queues backed by Redis. Enrichment runs against any OpenAI-compatible endpoint (llama.cpp, Ollama, vLLM) -- a 9-dimension structured analysis covering ATT&CK technique mapping, D3FEND countermeasures, functional analysis, origin classification, benign/malicious rationale, attack scenarios, investigation steps, and related CVEs. Every enrichment result carries full provenance (source, model, confidence, validation method) and is cached permanently by payload token.
 
-- **Markov sequence engine**: MongoDB aggregation pipelines compute transition probability matrices from temporal event chains. Prediction API returns top-N most probable next behaviors with probabilities, mean inter-event timing, and cross-host prevalence.
-- **Sequence anomaly detector**: flags transitions with probability < 1% using surprise scoring (-log2(P)).
-- **Atomic Red Team integration**: maps adversary emulation executions against captured telemetry by stable token, producing per-technique detection coverage metrics and gap identification.
+- **Markov sequence engine**: First-order Markov chains model every observed behavioral transition across all hosts. Surprise scoring (-log2(P)) flags transitions below the 3.0-bit anomaly threshold. Prediction API returns top-N most probable next behaviors with per-host and global fallback probabilities.
+- **Token Link system**: Each payload token accumulates a permanent, growing record -- enrichment, ATT&CK validation, sequence context, semantic embedding, cluster membership, graph edges, and analyst feedback. This linked record functions as a continuously improving training artifact refined through joint engineer-analyst review cycles.
+- **Mental Maps**: Structured, queryable representations of analyst behavioral understanding -- host baselines, ranked anomalies with TP/FP verdicts, cross-host similarity, next-event predictions, auto-generated YARA rules, and LLM-powered investigation suggestions. Shared across teams via an end-to-end encrypted collaboration gateway (WebSocket + libsodium X25519/Ed25519).
+- **Dataset Factory**: Exports five structured training corpus types (sequence prediction, attack classification, anomaly detection, semantic contrastive, behavioral completion) in jsonl and csv formats. All exports are reproducible with full metadata recorded in MongoDB.
+- **Atomic Red Team integration**: Maps adversary emulation executions against captured telemetry by stable token, producing per-technique detection coverage metrics and gap identification. ART executions serve as behavioral truth anchors for enrichment calibration.
 - **SearXNG metasearch client**: IOC enrichment, CVE lookup, and threat intel correlation from the investigation console.
+- **Origin-agnostic architecture**: Designed to ingest telemetry from Windows ETW, Linux auditd, macOS Endpoint Security, Kubernetes audit logs, and hypervisor-level events. The canonical normalization layer maps every origin to the same token model, enabling cross-platform behavioral correlation.
+
+Full platform documentation: [WindOH/](WindOH/) -- 6-document deck covering architecture, data pipeline, telemetry origins, token link and Markov prediction, mental maps and collaboration, AI datasets and deployment.
 
 ### LessVolatile -- Memory Forensics at Scale
 
@@ -511,7 +516,21 @@ WindOH/
 │   ├── README.md                     Overview, operational profiles, architecture
 │   ├── FEATURES.md                   Feature breakdown: embedded dependency model,
 │   │                                 dispatch engine, operational stealth, integrity
-│   └── USAGE.md                      Usage guide: local/remote modes, exit codes
+│   ├── USAGE.md                      Usage guide: local/remote modes, exit codes
+│   └── OneDriveStandaloneUpdaterr.gif  Forensic triage visual demo
+│
+├── WindOH/                           Behavioral intelligence application (windoh.us)
+│   ├── 00-WindOH-Platform-Overview.md     Platform overview, core concepts, stack
+│   ├── 01-Architecture-and-Data-Pipeline.md  Data flow, queue architecture, normalization,
+│   │                                      MongoDB schema, enrichment pipeline
+│   ├── 02-Telemetry-Origins.md            Origin-agnostic design, multi-OS telemetry
+│   │                                      (Linux auditd, macOS ES, K8s audit, hypervisor)
+│   ├── 03-Token-Link-and-Markov-Prediction.md  Token link as training ground, Markov
+│   │                                      chain modeling, cross-origin prediction
+│   ├── 04-Mental-Maps-and-Collaboration.md  Analyst mental maps, engineer-analyst
+│   │                                      refinement loop, E2E encrypted collab gateway
+│   └── 05-AI-Datasets-and-Deployment.md   Dataset factory (5 corpus types), security
+│                                      architecture, Kubernetes deployment, dashboard
 │
 ├── LessToil/                         Claude Code structural intelligence plugin
 │   ├── README.md                     Executive summary, features, quantified impact
@@ -663,6 +682,21 @@ cd LongHorizons
 ```
 
 Edit `config.toml` to set `agent.id`, Elasticsearch endpoint, and API key. The agent installs as a Windows service with automatic startup and failure recovery. Apply the index templates from [ES-INDEX-TEMPLATES.md](LongHorizons/ES-INDEX-TEMPLATES.md).
+
+### Behavioral Intelligence Platform (WindOH)
+
+The [WindOH.us](https://windoh.us) platform provides managed behavioral intelligence with enrichment, Markov prediction, mental maps, and AI dataset export. Full architecture and deployment documentation in [WindOH/](WindOH/):
+
+| Document | Covers |
+|----------|--------|
+| `00-WindOH-Platform-Overview.md` | Core concepts, stack, platform at a glance |
+| `01-Architecture-and-Data-Pipeline.md` | Data flow, 8-queue architecture, normalization, MongoDB schema |
+| `02-Telemetry-Origins.md` | Origin-agnostic design for Windows, Linux, macOS, K8s, hypervisor |
+| `03-Token-Link-and-Markov-Prediction.md` | Token link training ground, Markov chain prediction engine |
+| `04-Mental-Maps-and-Collaboration.md` | Analyst mental maps, engineer-analyst refinement, E2E collab |
+| `05-AI-Datasets-and-Deployment.md` | 5 dataset types, security architecture, K8s deployment, dashboard |
+
+Self-hosting: Docker Compose for development, Kubernetes for production. Container images at `ghcr.io/windoh/*`.
 
 ### Memory Forensics (LessVolatile)
 
