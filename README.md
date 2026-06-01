@@ -3,7 +3,7 @@
   <img src="Nice.gif" alt="WindOH Demo">
 </p>
 
-**Behavioral telemetry collection and analysis, memory forensics at scale, and covert forensic triage for Windows environments.**
+**Behavioral telemetry collection and analysis, memory forensics at scale, covert forensic triage, and multi-threaded Atomic Red Team execution for Windows environments.**
 
 ---
 
@@ -19,6 +19,7 @@ Three components answer this question at different altitudes:
 |---|---|---|
 | **LongHorizons Agent** | Rust binary (~8 MB). Captures real-time ETW from 200+ kernel and user-mode providers. Decomposes every event into a stable token (the WHAT -- a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO -- the instance-specific details). Baselined, rarity-scored, exported. Runs as a Windows service. No runtime dependencies. | One per endpoint |
 | **WindOH Application** | TypeScript/Next.js web app. Polls Elasticsearch for new tokens, enriches each unique payload token via a local LLM, caches enrichment permanently in MongoDB, builds Markov transition matrices from temporal event sequences, maps Atomic Red Team executions against captured telemetry. | One per fleet |
+| **LessAtomic** | Rust binary (~5 MB). Embeds 265 Atomic Red Team technique YAML files (752 atomic tests) at compile time. Multi-threaded execution via Rayon work-stealing. Variable interpolation, dependency resolution, pass/fail/skip/timeout reporting. No runtime dependencies — no Python, no PowerShell modules. | On-demand |
 | **LessVolatile + OneDriveStandaloneUpdaterr** | Memory forensics at scale. 68 Volatility plugins run in parallel with fingerprint-based deduplication across cases. Covert forensic triage via KAPE, PsExec, and EZ Tools. | On-demand |
 
 ### The Problem It Solves
@@ -481,6 +482,12 @@ WindOH/
 │   ├── uninstall.ps1                 Service uninstaller with data removal option
 │   └── release.zip                   Pre-built agent binary (~3.6 MB)
 │
+├── LessAtomic/                       Rust Atomic Red Team test executor
+│   ├── README.md                     Overview, architecture, CLI reference, ethics
+│   ├── QUICKSTART.md                 10-second quick-start guide
+│   ├── RELEASE_NOTES.md              v0.1.0 release notes
+│   └── LessAtomic.zip                Pre-built binary archive
+│
 ├── LessVolatile/                     Rust memory forensics launcher
 │   ├── README.md                     Overview, capabilities, business case, usage
 │   └── RELEASE.md                    v0.2.0 release notes
@@ -519,6 +526,7 @@ WindOH/
 |---|---|---|
 | LongHorizons Agent | Rust | Windows ETW (TDH API), SQLite (WAL), AES-256-GCM, HKDF-SHA256, DPAPI, parking_lot, tokio |
 | WindOH Application | TypeScript | Next.js 14, React 18, tRPC, MongoDB 7 + Mongoose 8, BullMQ + Redis, @elastic/elasticsearch 8.x, OpenAI SDK (local LLM), SearXNG |
+| LessAtomic | Rust | serde + serde_yaml, clap, rayon, indicatif, base64, wait-timeout, walkdir (build), regex |
 | LessVolatile | Rust | Volatility 3 (embedded), Python 3.9 (embedded), zip, sha2, csv, ratatui + crossterm, indicatif |
 | OneDriveStandaloneUpdaterr | Rust | KAPE + PsExec + Hayabusa + Eric Zimmerman tools (embedded via rust-embed), tokio, clap, sha2, zip |
 | LessToil Plugin | Python | tree-sitter (41 grammars), SQLite3, PyYAML, Claude Code hooks/agents/commands/skills |
@@ -526,6 +534,23 @@ WindOH/
 ---
 
 ## Quick Start
+
+### Atomic Red Team Execution (LessAtomic)
+
+Download from the shared [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA), then:
+
+```powershell
+# List all 752 available Windows tests
+.\LessAtomic.exe --dry-run
+
+# Run all T1003 (Credential Dumping) tests with auto-install
+.\LessAtomic.exe -t T1003 --auto-install --danger-accept
+
+# Run everything with 7 threads and JSON output
+.\LessAtomic.exe --danger-accept -c 7 -o json --log-dir ./logs/
+```
+
+No runtime dependencies. Single static binary. Embeds 265 technique YAML files at compile time.
 
 ### Continuous Telemetry (LongHorizons)
 
