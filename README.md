@@ -1,5 +1,6 @@
 <p align="center">
   <img src="windOH.png" alt="WindOH">
+  <img src="Nice.gif" alt="WindOH Demo">
 </p>
 
 **Behavioral telemetry collection and analysis, memory forensics at scale, and covert forensic triage for Windows environments.**
