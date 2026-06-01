@@ -1,7 +1,7 @@
-# ⚛ LessAtomic
+# LessAtomic
 
-> **Single-binary, multi-threaded Atomic Red Team™ test executor for Windows.**  
-> Embed. Discover. Resolve. Execute. Report. — All from one static executable.
+> **Single-binary, multi-threaded Atomic Red Team test executor for Windows.**  
+> Embed. Discover. Resolve. Execute. Report. -- All from one static executable.
 
 [![Rust](https://img.shields.io/badge/rust-1.96+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -10,18 +10,18 @@
 
 ---
 
-## 🙏 Credits & Attribution
+## Credits & Attribution
 
 **LessAtomic** is built entirely upon the work of the **[Atomic Red Team™](https://github.com/redcanaryco/atomic-red-team)** project by **Red Canary**.
 
 > Atomic Red Team™ is a library of tests mapped to the MITRE ATT&CK® framework.  
 > Each atomic test is a small, highly portable detection test that can be executed standalone.
 
-This project embeds, resolves, and executes those atomic tests — it does **not** create, modify, or redistribute test definitions. All 752 Windows-compatible technique files embedded at compile time come directly from the Atomic Red Team repository. The YAML schema, test logic, prerequisite commands, and cleanup procedures are the work of Red Canary's security researchers and the broader ART contributor community.
+This project embeds, resolves, and executes those atomic tests -- it does **not** create, modify, or redistribute test definitions. All 752 Windows-compatible technique files embedded at compile time come directly from the Atomic Red Team repository. The YAML schema, test logic, prerequisite commands, and cleanup procedures are the work of Red Canary's security researchers and the broader ART contributor community.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                 ⚛ LessAtomic                             │
+│                  LessAtomic                             │
 │          "Standing on the shoulders of giants"            │
 │                                                          │
 │  ┌──────────────────────────────────────────────────┐   │
@@ -41,24 +41,23 @@ This project embeds, resolves, and executes those atomic tests — it does **not
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-1. [What Is LessAtomic?](#-what-is-lessatomic)
-2. [Business & Scientific Rationale](#-business--scientific-rationale)
-3. [Performance: Why LessAtomic Is Fast](#-performance-why-lessatomic-is-fast)
-4. [Architecture](#-architecture)
-5. [Quick Start](#-quick-start)
-6. [CLI Reference](#-cli-reference)
-7. [Execution Pipeline](#-execution-pipeline)
-8. [Data Model](#-data-model)
-9. [Discovery Statistics](#-discovery-statistics)
-10. [Safety & Ethics](#-safety--ethics)
-11. [Build from Source](#-build-from-source)
-12. [License & Attribution](#-license--attribution)
+1. [What Is LessAtomic?](#what-is-lessatomic)
+2. [Business & Scientific Rationale](#business--scientific-rationale)
+3. [Performance: Why LessAtomic Is Fast](#performance-why-lessatomic-is-fast)
+4. [Architecture](#architecture)
+5. [Quick Start](#quick-start)
+6. [CLI Reference](#cli-reference)
+7. [Execution Pipeline](#execution-pipeline)
+8. [Data Model](#data-model)
+9. [Discovery Statistics](#discovery-statistics)
+10. [Safety & Ethics](#safety--ethics)
+11. [License & Attribution](#license--attribution)
 
 ---
 
-## 🎯 What Is LessAtomic?
+## What Is LessAtomic?
 
 LessAtomic is a **single static executable** (168 MB, fully self-contained) that:
 
@@ -75,7 +74,7 @@ LessAtomic is a **single static executable** (168 MB, fully self-contained) that
 
 ---
 
-## 🔬 Business & Scientific Rationale
+## Business & Scientific Rationale
 
 ### Why This Exists
 
@@ -131,11 +130,11 @@ The design follows established computer science and security engineering princip
 
 ---
 
-## ⚡ Performance: Why LessAtomic Is Fast
+## Performance: Why LessAtomic Is Fast
 
 ### The Problem: Iteration Speed Kills Productivity
 
-Security validation workflows — red team pre-flight checks, detection engineering regression tests, CI/CD security gates — share a common bottleneck: **test execution latency**. If your full test suite takes 6 hours to run, you run it once a quarter. If it takes 30 minutes, you run it on every commit.
+Security validation workflows -- red team pre-flight checks, detection engineering regression tests, CI/CD security gates -- share a common bottleneck: **test execution latency**. If your full test suite takes 6 hours to run, you run it once a quarter. If it takes 30 minutes, you run it on every commit.
 
 Traditional approaches force a trade-off:
 
@@ -147,7 +146,7 @@ Traditional approaches force a trade-off:
 
 ### The Math: Threading at 80% CPU Saturation
 
-LessAtomic defaults to **80% of logical CPU cores** for its Rayon work-stealing thread pool. This is the empirically optimal saturation point — above 80%, contention for memory bandwidth and I/O begins to erode gains; below 80%, cores sit idle.
+LessAtomic defaults to **80% of logical CPU cores** for its Rayon work-stealing thread pool. This is the empirically optimal saturation point -- above 80%, contention for memory bandwidth and I/O begins to erode gains; below 80%, cores sit idle.
 
 ```mermaid
 graph LR
@@ -156,7 +155,7 @@ graph LR
         S752 -.->|"Total: ~6.3 hours"| SEQ[ ]
     end
 
-    subgraph "LessAtomic — 6 threads (80% of 8 cores)"
+    subgraph "LessAtomic -- 6 threads (80% of 8 cores)"
         W1["Worker 1: 125 tests<br/>~63 min"]
         W2["Worker 2: 125 tests<br/>~63 min"]
         W3["Worker 3: 125 tests<br/>~63 min"]
@@ -250,7 +249,7 @@ LessAtomic.exe -c 1 -v --danger-accept
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ### System Overview
 
@@ -264,7 +263,7 @@ graph TB
         BUILD --> EMBED
     end
 
-    subgraph "Runtime — Discovery"
+    subgraph "Runtime -- Discovery"
         EMBED2["&amp;'static [(&amp;str, &amp;str)]<br/>265 raw YAML strings"]
         MODELS["serde Deserialize<br/>AtomicYaml → AtomicTest → Executor"]
         FILTER["TestFilters<br/>technique · executor · name · elevation"]
@@ -274,7 +273,7 @@ graph TB
         FILTER --> RESOLVE
     end
 
-    subgraph "Runtime — Execution"
+    subgraph "Runtime -- Execution"
         DEPS["dependency.rs<br/>prereq_check → auto_install → recheck"]
         PS["PowerShellExecutor<br/>UTF-16LE → base64<br/>-EncodedCommand"]
         CMD["CmdExecutor<br/>temp .bat file<br/>@echo off"]
@@ -284,7 +283,7 @@ graph TB
         DEPS --> MANUAL
     end
 
-    subgraph "Runtime — Orchestration"
+    subgraph "Runtime -- Orchestration"
         POOL["rayon::ThreadPool<br/>work-stealing<br/>configurable concurrency"]
         PB["indicatif::ProgressBar<br/>PASS/FAIL/SKIP · ETA"]
         REPORT["report.rs<br/>text table · JSON export<br/>per-test .log files"]
@@ -296,7 +295,7 @@ graph TB
     DEPS --> POOL
 
     subgraph "Safety"
-        WARN["⚠ Safety Warning<br/>interactive confirmation"]
+        WARN[" Safety Warning<br/>interactive confirmation"]
         ADMIN["admin.rs<br/>net session elevation check"]
         CLEANUP["Cleanup commands<br/>run after each test"]
     end
@@ -359,9 +358,9 @@ sequenceDiagram
     participant Exec as Command Executor
     participant Report as Report Engine
 
-    User->>CLI: art-runner -t T1003 --auto-install -c 4
+    User->>CLI: LessAtomic.exe -t T1003 --auto-install -c 4
     CLI->>Safety: --danger-accept? (y/n)
-    Safety-->>User: ⚠ WARNING: real attack techniques
+    Safety-->>User:  WARNING: real attack techniques
     User->>Safety: y [confirm]
     Safety->>Discovery: discover_tests(filters)
 
@@ -413,13 +412,13 @@ sequenceDiagram
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 - **Windows 10/11** (x86_64)
 - The `atomics/` directory from the [Atomic Red Team repository](https://github.com/redcanaryco/atomic-red-team)
-- Administrator privileges (optional — required for elevated tests)
+- Administrator privileges (optional -- required for elevated tests)
 - **That's it.** No Python, Ruby, or PowerShell modules needed.
 
 ### Download Pre-Built Binary
@@ -428,40 +427,33 @@ Get the pre-built binary from the shared WindOH Google Drive:
 
 > **Download**: [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA)
 
-The same folder contains **LessVolatile** (~129 MB), **OneDriveStandaloneUpdaterr** (~324 MB), and **LessAtomic** — all three WindOH toolchain binaries in one place.
+The same folder contains **LessVolatile** (~129 MB), **OneDriveStandaloneUpdaterr** (~324 MB), and **LessAtomic** -- all three WindOH toolchain binaries in one place.
 
-### Build from Source
+### Usage
 
 ```powershell
-# Clone the Atomic Red Team repository (if you haven't already)
-git clone https://github.com/redcanaryco/atomic-red-team.git
-cd atomic-red-team
-
-# Build LessAtomic (requires Rust 1.96+)
-cd art-runner
-cargo build --release
-
-# The binary is at: target/release/art-runner.exe
-
 # List all available Windows tests
-./target/release/art-runner.exe --dry-run
+LessAtomic.exe --dry-run
 
-# Run all T1003 (Credential Dumping) tests with auto-install
-./target/release/art-runner.exe -t T1003 --auto-install --danger-accept
+# Filter by technique
+LessAtomic.exe -t T1003 --dry-run
 
-# Run a single technique with verbose output
-./target/release/art-runner.exe -t T1059.001 -v --danger-accept
+# Run a single technique
+LessAtomic.exe -t T1059.001 --danger-accept
 
-# Run everything with 4 threads and JSON output
-./target/release/art-runner.exe --danger-accept -c 4 -o json --log-dir ./logs/
+# Run all T1003 tests with auto-install
+LessAtomic.exe -t T1003 --auto-install --danger-accept
+
+# Run everything with 7 threads and JSON output
+LessAtomic.exe --danger-accept -c 7 -o json --log-dir ./logs/
 ```
 
 ---
 
-## 📖 CLI Reference
+## CLI Reference
 
 ```
-art-runner.exe [FLAGS] [OPTIONS]
+LessAtomic.exe [FLAGS] [OPTIONS]
 
 FILTERS:
   -t, --technique <TECH>     Filter by technique ID (prefix match, e.g. T1003)
@@ -486,7 +478,7 @@ PATHS:
 
 SAFETY:
       --danger-accept        Skip the interactive safety confirmation
-      --no-cleanup           Skip cleanup commands (DANGEROUS — leaves artifacts)
+      --no-cleanup           Skip cleanup commands (DANGEROUS -- leaves artifacts)
 
 FLAGS:
   -h, --help                 Print help information
@@ -503,7 +495,7 @@ FLAGS:
 
 ---
 
-## 🔄 Execution Pipeline
+## Execution Pipeline
 
 ### 1. Build-Time Embedding
 
@@ -601,7 +593,7 @@ Any dep FAILED/MANUAL → Skip test with reason
 
 ---
 
-## 📊 Data Model
+## Data Model
 
 ```mermaid
 classDiagram
@@ -674,7 +666,7 @@ classDiagram
 
 ---
 
-## 📈 Discovery Statistics
+## Discovery Statistics
 
 As embedded at compile time from the Atomic Red Team `atomics/` directory:
 
@@ -713,16 +705,16 @@ pie title Dependency Status
 
 ---
 
-## 🛡 Safety & Ethics
+## Safety & Ethics
 
-### ⚠ Mandatory Warning
+### Mandatory Warning
 
 On every execution (unless `--danger-accept` is passed):
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
-║                      ⚠  WARNING: ATOMIC RED TEAM  ⚠                      ║
-║                     TEST EXECUTION — KNOW THE RISKS                      ║
+║                        WARNING: ATOMIC RED TEAM                        ║
+║                     TEST EXECUTION -- KNOW THE RISKS                      ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║                                                                          ║
 ║  This tool executes REAL attack techniques against your system.          ║
@@ -767,71 +759,13 @@ This tool must **never** be used against systems without explicit authorization.
 
 ---
 
-## 🔨 Build from Source
-
-### Requirements
-
-- **Rust 1.96+** ([rustup.rs](https://rustup.rs))
-- **Windows 10/11** (x86_64) with MSVC toolchain
-- **Atomic Red Team repository** (the `atomics/` directory must be at `../atomics` relative to the crate)
-
-### Build
-
-```powershell
-# From the atomic-red-team repository root:
-cd art-runner
-
-# Debug build (faster compile, ~40s first time)
-cargo build
-
-# Release build (optimized, ~45s)
-cargo build --release
-
-# The binary:
-#   target/debug/art-runner.exe   (debug)
-#   target/release/art-runner.exe (release, 4.8 MB)
-```
-
-### Verify
-
-```powershell
-./target/release/art-runner.exe --version
-# art-runner 0.1.0
-
-./target/release/art-runner.exe --dry-run
-# ╔══════════════════════════════════════╗
-# ║     DRY RUN — TEST LIST             ║
-# ║  Found 752 matching test(s)         ║
-# ╚══════════════════════════════════════╝
-```
-
-### Dependency Tree
-
-```
-art-runner v0.1.0
-├── serde + serde_yaml    # YAML deserialization
-├── serde_json            # JSON output format
-├── clap (derive)         # CLI argument parsing
-├── rayon                 # Work-stealing thread pool
-├── indicatif             # Terminal progress bars
-├── log + env_logger      # Structured logging
-├── regex                 # #{var} pattern matching
-├── anyhow + thiserror    # Error handling
-├── base64                # PowerShell -EncodedCommand
-├── wait-timeout          # Per-test timeout enforcement
-├── uuid                  # Temp file naming
-└── walkdir (build)       # YAML file discovery at compile time
-```
-
----
-
-## 📚 References
+## References
 
 ### Primary Sources
 
-- **Atomic Red Team™** — [github.com/redcanaryco/atomic-red-team](https://github.com/redcanaryco/atomic-red-team)
-- **MITRE ATT&CK®** — [attack.mitre.org](https://attack.mitre.org/)
-- **Red Canary** — [redcanary.com](https://redcanary.com)
+- **Atomic Red Team™** -- [github.com/redcanaryco/atomic-red-team](https://github.com/redcanaryco/atomic-red-team)
+- **MITRE ATT&CK®** -- [attack.mitre.org](https://attack.mitre.org/)
+- **Red Canary** -- [redcanary.com](https://redcanary.com)
 
 ### Computer Science Foundations
 
@@ -861,12 +795,12 @@ art-runner v0.1.0
 
 ---
 
-## 📄 License & Attribution
+## License & Attribution
 
 ### LessAtomic
 
 ```
-MIT License — Copyright (c) 2026
+MIT License -- Copyright (c) 2026
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files...
@@ -887,10 +821,10 @@ Technique IDs, names, and descriptions reference the MITRE ATT&CK® framework. M
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║   ⚛ LessAtomic — Because security validation               ║
+║    LessAtomic -- Because security validation               ║
 ║   should be deterministic, portable, and fast.              ║
 ║                                                            ║
-║   Built with Rust 🦀 · Standing on Red Canary's shoulders   ║
+║   Built with Rust  · Standing on Red Canary's shoulders   ║
 ║                                                            ║
 ╚══════════════════════════════════════════════════════════════╝
 ```

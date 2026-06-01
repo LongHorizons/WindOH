@@ -1,6 +1,6 @@
-# LessAtomic — Release Notes
+# LessAtomic -- Release Notes
 
-## v0.1.0 — Initial Release (2026-06-01)
+## v0.1.0 -- Initial Release (2026-06-01)
 
 **Binary**: `LessAtomic.exe` (168 MB, static, zero runtime deps)  
 **Platform**: Windows 10/11 x86_64  

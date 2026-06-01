@@ -1,10 +1,10 @@
-# LessAtomic — Quick Start
+# LessAtomic -- Quick Start
 
 ## One binary. 752 Windows attack technique tests. Fully self-contained.
 
 ---
 
-## 🚀 10 Seconds to Start
+## 10 Seconds to Start
 
 ```powershell
 # 1. Extract LessAtomic-release.zip
@@ -18,7 +18,7 @@ LessAtomic.exe --dry-run
 # → Found 752 matching test(s)
 ```
 
-**That's it.** On first run, LessAtomic extracts its embedded assets (570 files) to `%TEMP%\LessAtomic\atomics\`. Subsequent runs use the cache — instant startup. No external dependencies needed.
+**That's it.** On first run, LessAtomic extracts its embedded assets (570 files) to `%TEMP%\LessAtomic\atomics\`. Subsequent runs use the cache -- instant startup. No external dependencies needed.
 
 ---
 
@@ -38,7 +38,7 @@ LessAtomic/
 
 ---
 
-## ⚡ Performance
+## Performance
 
 LessAtomic uses **80% of your CPU cores** by default for maximum throughput.
 
@@ -56,14 +56,14 @@ Override with `-c N` if you want fewer/more workers.
 
 ---
 
-## 📊 What's Embedded
+## What's Embedded
 
 | Asset | Count | Size |
 |--------|-------|------|
 | Technique YAML files | 265 | ~239 KB |
 | Source scripts (src/) | ~350 | ~10 MB |
 | Binary tools (bin/) | ~220 | ~161 MB |
-| Total atomic tests | **752** | — |
+| Total atomic tests | **752** | -- |
 
 ---
 
@@ -97,7 +97,7 @@ LessAtomic.exe --danger-accept -c 4 -o json --log-dir .\logs\  # Full run
 
 ---
 
-## ⚠ Safety
+## Safety
 
 These are **REAL attack techniques**. Always use a disposable VM.
 
@@ -106,7 +106,7 @@ These are **REAL attack techniques**. Always use a disposable VM.
 <div align="center">
 
 ```
-⚛ LessAtomic v0.1.0 — Built on Atomic Red Team™ by Red Canary
+ LessAtomic v0.1.0 -- Built on Atomic Red Team™ by Red Canary
 ```
 
 </div>
