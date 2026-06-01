@@ -4,7 +4,9 @@
 
 A production-grade Windows telemetry agent that captures real-time ETW events from 200+ kernel and user-mode providers, normalizes and tokenizes them into cryptographically deterministic behavioral identifiers, enriches with cross-event relational context, scores rarity via decay-weighted baselines, and exports to Elasticsearch for downstream security operations, threat hunting, and LLM dataset generation.
 
-![Wizard](Wizard.gif)
+<p align="center">
+  <img src="Wizard.gif" alt="LongHorizons Wizard" />
+</p>
 
 ---
 
