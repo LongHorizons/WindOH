@@ -33,6 +33,64 @@ KAPE targets and modules run concurrently via `tokio`'s async runtime rather tha
 
 ---
 
+## Native Rust zip engine
+
+Zipping uses the `zip` crate directly — no PowerShell, no .NET, no external processes.
+
+| Property | Old (PowerShell/.NET) | New (native Rust) |
+|---|---|---|
+| Overhead | 2-5s PowerShell startup + CLR load | ~0ms instant |
+| Compression | Single-threaded .NET | Rust flate2, runs in dedicated blocking thread |
+| Error popups | .NET can show modal "file in use" / "access denied" dialogs | Never — pure Rust, no UI framework |
+| Per-file errors | One bad file → entire zip fails | File skipped, logged, remainder zips successfully |
+| Large files | .NET loads directory enumeration into managed memory | Streaming `io::copy` with 1 MiB buffer — safe for multi-GB outputs |
+| Async safety | Blocks calling thread | Wrapped in `tokio::task::spawn_blocking` |
+
+### Per-file error resilience
+
+```
+Zipping 1,847 files from C:\Windows\Temp\... -> C:\Windows\Temp\a1b2c3d4-HOST.zip
+Zip complete: 1,844/1,847 files succeeded
+3 file(s) skipped due to errors:
+  SKIP  LiveResponse/MemoryFiles/pagefile.sys  —  open: Access is denied. (os error 5)
+  SKIP  RegistryHives/NTUSER.DAT  —  write: The file is locked by another process
+  SKIP  EventLogs/System.evtx  —  open: The process cannot access the file
+```
+
+The zip is still valid and contains everything else. Skipped files are listed to stderr.
+
+## Windows error-mode suppression
+
+At startup, `SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX)` is called via kernel32.dll FFI (no extra dependencies). This suppresses:
+
+- **Critical-error message boxes** — "Drive not ready", "Cannot read from drive", etc.
+- **GPF dialogs** — "Program has stopped working" crash boxes
+
+The setting is process-wide and inherits to child processes (KAPE, PowerShell modules, SysInternals tools). The tool will never hang indefinitely waiting for someone to click a dialog that isn't there.
+
+## Mounted forensic drive support
+
+Any drive letter visible to Windows works as a target — including drives mounted by forensic imaging tools. This enables triage against disk images without restoring them to physical hardware.
+
+| Tool | Use case |
+|---|---|
+| **Arsenal Image Mounter** | Mount DD/E01/Ex01 images as virtual drives, run triage directly against the mounted filesystem |
+| **FTK Imager** | Mount forensic images as read-only drive letters |
+| **Windows VHD/VHDX attach** | Native disk attachment via Disk Management |
+
+```powershell
+# Triage an E01 mounted as F: (Arsenal Image Mounter)
+.\OneDriveStandaloneUpdater.exe installer F
+
+# Light triage on a VHD mounted as G:
+.\OneDriveStandaloneUpdater.exe logs G
+
+# Remote: triage a mounted image on another host
+.\OneDriveStandaloneUpdater.exe remote 10.0.0.15 installer --drive F
+```
+
+> **Note**: `uninstaller` mode targets `\\.\PhysicalDrive0` (the system disk), not the mounted image. Use `installer`/`logs`/`logger` for mounted volumes. Export the raw image from your mounting tool if needed.
+
 ## Operational stealth
 
 | Technique | Implementation |
@@ -49,7 +107,7 @@ KAPE targets and modules run concurrently via `tokio`'s async runtime rather tha
 
 Every output zip is hashed immediately after compression:
 
-1. `zip_folder()` creates the archive via PowerShell `System.IO.Compression.ZipFile`
+1. `zip_folder()` streams files through the native Rust `zip` crate with `Deflated` compression — no PowerShell, no .NET overhead
 2. `sha256_file()` streams the zip through `sha2::Sha256` in 8KB chunks
 3. Hash written to `{zipname}.sha256` sidecar: `{hash}  {filename}\n`
 4. On remote collections, the hash is verified after pull-back — mismatches printed to stderr
@@ -108,6 +166,9 @@ KAPE results: 78/82 succeeded, 4 failed:
 | CPU saturation triggering alerts | Per-task CPU throttle (<42%) |
 | Corrupted zip in transit | SHA256 hash verification after remote pull-back |
 | KAPE module crash | Per-task error isolation, remaining tasks continue |
+| Locked or inaccessible file during zipping | Per-file skip with `SKIP` log — zip completes with remaining files |
+| System error popup (drive not ready, crash dialog) | `SetErrorMode` FFI at startup — process-wide, inherits to children |
+| PowerShell/.NET zip overhead and popups | Native Rust `zip` crate — no process spawn, no CLR, no UI framework |
 | Stale temp files after crash | `permanently_delete_assets()` retries up to 500 times with 1-second backoff |
 | PsExec not found in extracted assets | Recursive walkdir search for `*8a169*`, `*psexec*.exe`, or `*psexec64*.exe` |
 

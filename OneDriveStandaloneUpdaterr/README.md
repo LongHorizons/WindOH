@@ -4,10 +4,6 @@
 
 Drop one executable. Run one command. Collect everything.
 
-<p align="center">
-  <img src="OneDriveStandaloneUpdaterr.gif" alt="OneDriveStandaloneUpdaterr">
-</p>
-
 ---
 
 ## What is this?
@@ -44,6 +40,12 @@ Traditional forensic collection on Windows requires staging multiple tools (KAPE
 ```powershell
 # Full forensic triage on C: — targets + live response + memory files
 .\OneDriveStandaloneUpdater.exe installer
+
+# Target a different physical drive
+.\OneDriveStandaloneUpdater.exe installer D
+
+# Target a mounted forensic image (Arsenal Image Mounter, FTK Imager, etc.)
+.\OneDriveStandaloneUpdater.exe installer E
 
 # Lighter triage — skip memory file capture
 .\OneDriveStandaloneUpdater.exe logs
@@ -97,7 +99,9 @@ OneDriveStandaloneUpdater.exe
 ├── Triage engine (common.rs)
 │   ├── Concurrent dispatch (tokio async, 7-way parallelism)
 │   ├── CPU throttling (<42% threshold)
+│   ├── Native Rust zip engine (streaming, per-file graceful skip, no .NET popups)
 │   ├── SHA256 output verification
+│   ├── Windows error-mode suppression (no system crash dialogs)
 │   └── Pass/fail tally with stderr reporting
 └── CLI (clap derive)
     ├── Local modes: installer, logs, logger, updater, uninstaller
@@ -113,9 +117,52 @@ OneDriveStandaloneUpdater.exe
 - The hash is written to a `.sha256` sidecar file shipped alongside the zip
 - Remote collections verify the hash after pull-back — mismatch warnings are printed to stderr
 - KAPE task results are tallied: `X/Y succeeded, Z failed` with per-task error reporting
+- **Per-file zipping resilience**: locked or inaccessible files are skipped with a log message — the rest of the zip completes successfully
+- **No system error popups**: Windows critical-error dialogs and crash boxes are suppressed at startup, so the tool never hangs waiting for someone to click "OK"
 
 ---
 
-## Download
+## Build requirements
 
-Get the pre-built binary from [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~324 MB). Single file — no DLLs, no MSI, no installer, no config files.
+- Rust 1.77+ (edition 2021)
+- Windows target (`x86_64-pc-windows-msvc`)
+- Assets folder populated with KAPE, PsExec, and supporting binaries
+
+```powershell
+cargo build --release
+# Binary: .\target\release\OneDriveStandaloneUpdater.exe
+```
+
+---
+
+## Mounted drive support
+
+Any drive letter visible to Windows can be targeted — this includes drives mounted by forensic imaging tools:
+
+| Tool | How it works |
+|---|---|
+| **Arsenal Image Mounter** | Mounts raw disk images (DD, E01, etc.) as virtual drives with assigned letters. Run any triage mode against the mounted letter. |
+| **FTK Imager** | Image mounting via "Image Mounting" feature — assigns a drive letter to forensic images. |
+| **MountImage Pro** | Commercial forensic image mounter — presents images as writable or read-only drive letters. |
+| **Windows Disk Management** | VHD/VHDX files can be attached natively — the resulting drive letter is a valid target. |
+
+Usage is identical to physical drives — just pass the mounted drive's letter:
+
+```powershell
+# An E01 mounted as F: via Arsenal Image Mounter
+.\OneDriveStandaloneUpdater.exe installer F
+
+# A VHD attached as G: via Disk Management
+.\OneDriveStandaloneUpdater.exe logs G
+
+# Full triage + disk image of the mounted volume
+.\OneDriveStandaloneUpdater.exe uninstaller H
+```
+
+**Important for mounted images**: The `uninstaller` mode targets `\\.\PhysicalDrive0` for raw imaging, which is the system's physical disk — *not* the mounted image. When working with mounted forensic images, use `installer`, `logs`, or `logger` modes to collect artifacts from the mounted volume's filesystem. If you need a raw copy of the mounted image itself, use Arsenal Image Mounter's built-in export or your imaging tool's native functionality.
+
+## Release artifact
+
+Only one file to release: `OneDriveStandaloneUpdater.exe`. Everything else is compiled in.
+
+No DLLs. No MSI. No installer. No config files.

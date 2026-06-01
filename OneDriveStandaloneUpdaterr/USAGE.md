@@ -69,6 +69,43 @@ Runs full targets and the large module set, **plus** captures a raw disk image o
 
 ---
 
+## Mounted drive collection
+
+The tool accepts any drive letter visible to Windows — this includes virtual drives mounted by forensic imaging tools. KAPE sees them as normal filesystems and collects artifacts accordingly.
+
+### Supported mounting solutions
+
+| Tool | Mount method | Notes |
+|---|---|---|
+| **Arsenal Image Mounter** | Mounts DD, E01, Ex01, Lx01, and other forensic formats as virtual physical drives or logical volumes | Best-in-class compatibility. Mount as writable if artifacts require temp writes during collection. |
+| **FTK Imager** | File → Image Mounting → select image → assign drive letter | Read-only by default. Works for all artifact collection except modules that need write access. |
+| **MountImage Pro** | Commercial tool, mounts most forensic image formats | Supports both read-only and writable modes. |
+| **Windows native VHD/VHDX** | Disk Management → Attach VHD | Only works with VHD/VHDX containers, not raw forensic images. |
+
+### Usage with mounted drives
+
+```powershell
+# Full triage on an E01 mounted as F: via Arsenal Image Mounter
+.\OneDriveStandaloneUpdater.exe installer F
+
+# Light triage (no memory files) on a mounted image at G:
+.\OneDriveStandaloneUpdater.exe logs G
+
+# Targets-only on a VHD mounted as H:
+.\OneDriveStandaloneUpdater.exe logger H
+
+# Remote triage targeting a mounted volume on a remote host
+.\OneDriveStandaloneUpdater.exe remote 192.168.1.50 installer --drive E
+```
+
+### ⚠ uninstaller mode and mounted images
+
+The `uninstaller` command captures `\\.\PhysicalDrive0` — the system's physical disk — not the mounted forensic image. When triaging mounted images, use `installer`, `logs`, or `logger` instead. If you need a forensic copy of the mounted image itself, export it directly from your imaging tool (Arsenal Image Mounter → export disk, FTK Imager → export disk image).
+
+### Read-only considerations
+
+Some mounting solutions default to read-only. This is fine for most KAPE targets, but a few modules (notably some PowerShell-based collectors) may fail if they need to write temp data. If you see unexpected failures, try remounting as writable or use `logger` mode (targets-only, no live response modules).
+
 ## Remote collection
 
 Orchestrates triage on a remote Windows host via PsExec:
@@ -143,3 +180,5 @@ type .\output.zip.sha256
 | Non-zero | Fatal error (binary copy failed, PsExec launch failed, timeout, I/O error) |
 
 KAPE task failures are reported to stderr but do **not** cause a non-zero exit — the tool proceeds with partial results.
+
+Similarly, individual file zipping failures (locked files, access denied, path too long) are skipped with a `SKIP` log entry — the remaining files still produce a valid zip. No Windows error popups will block the process.

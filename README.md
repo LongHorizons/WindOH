@@ -1,7 +1,19 @@
 <p align="center">
   <img src="windOH.png" alt="WindOH">
-  <img src="Nice.gif" alt="WindOH Demo">
-  <img src="OneDriveStandaloneUpdaterr/OneDriveStandaloneUpdaterr.gif" alt="OneDriveStandaloneUpdaterr">
+</p>
+
+<p align="center">
+  <img src="Nice.gif" alt="WindOH Platform Demo">
+  <img src="LongHorizons/Wizard.gif" alt="LongHorizons Agent Setup Wizard">
+</p>
+
+<p align="center">
+  <img src="OneDriveStandaloneUpdaterr/OneDriveStandaloneUpdaterr.gif" alt="OneDriveStandaloneUpdaterr Forensic Triage">
+  <img src="Compute/Compute.gif" alt="HotStuff Workstation">
+</p>
+
+<p align="center">
+  <em>6 visuals across the project -- 4 GIFs (Nice.gif, Wizard.gif, OneDriveStandaloneUpdaterr.gif, Compute.gif) and 2 PNGs (windOH.png, LessAtomic/AtomicRedTeam.png) documenting every major surface.</em>
 </p>
 
 **Behavioral telemetry collection and analysis, memory forensics at scale, covert forensic triage, and multi-threaded Atomic Red Team execution for Windows environments.**
@@ -20,7 +32,7 @@ Three components answer this question at different altitudes:
 |---|---|---|
 | **LongHorizons Agent** | Rust binary (~8 MB). Captures real-time ETW from 200+ kernel and user-mode providers. Decomposes every event into a stable token (the WHAT -- a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO -- the instance-specific details). Baselined, rarity-scored, exported. Runs as a Windows service. No runtime dependencies. | One per endpoint |
 | **WindOH Application** | TypeScript/Next.js web app. Polls Elasticsearch for new tokens, enriches each unique payload token via a local LLM, caches enrichment permanently in MongoDB, builds Markov transition matrices from temporal event sequences, maps Atomic Red Team executions against captured telemetry. | One per fleet |
-| **LessAtomic** | Rust binary (~5 MB). Embeds 265 Atomic Red Team technique YAML files (752 atomic tests) at compile time. Multi-threaded execution via Rayon work-stealing. Variable interpolation, dependency resolution, pass/fail/skip/timeout reporting. No runtime dependencies — no Python, no PowerShell modules. | On-demand |
+| **LessAtomic** | Rust binary (~5 MB). Embeds 265 Atomic Red Team technique YAML files (752 atomic tests) at compile time. Multi-threaded execution via Rayon work-stealing. Variable interpolation, dependency resolution, pass/fail/skip/timeout reporting. No runtime dependencies -- no Python, no PowerShell modules. | On-demand |
 | **LessVolatile + OneDriveStandaloneUpdaterr** | Memory forensics at scale. 68 Volatility plugins run in parallel with fingerprint-based deduplication across cases. Covert forensic triage via KAPE, PsExec, and EZ Tools. | On-demand |
 
 ### The Problem It Solves
@@ -123,7 +135,7 @@ graph TB
 
     Analyst["Security Analyst"]
     SOC["SOC / IR Team"]
-    Endpoints["Windows Endpoints<br/>(1–100,000)"]
+    Endpoints["Windows Endpoints<br/>(1-100,000)"]
     Elasticsearch[("Elasticsearch<br/>Cluster")]
     LLM[("Local LLM<br/>llama.cpp / Ollama / vLLM")]
     ThreatIntel["Threat Intel<br/>SearXNG Metasearch"]
@@ -481,12 +493,14 @@ WindOH/
 │   ├── config.toml                   Annotated 580-line deployment configuration
 │   ├── install.ps1                   Windows service installer (PowerShell)
 │   ├── uninstall.ps1                 Service uninstaller with data removal option
+│   ├── Wizard.gif                    Agent setup wizard demonstration
 │   └── release.zip                   Pre-built agent binary (~3.6 MB)
 │
 ├── LessAtomic/                       Rust Atomic Red Team test executor
 │   ├── README.md                     Overview, architecture, CLI reference, ethics
 │   ├── QUICKSTART.md                 10-second quick-start guide
 │   ├── RELEASE_NOTES.md              v0.1.0 release notes
+│   ├── AtomicRedTeam.png             Atomic Red Team technique mapping visual
 │   └── LessAtomic.zip                Pre-built binary archive
 │
 ├── LessVolatile/                     Rust memory forensics launcher
@@ -509,6 +523,14 @@ WindOH/
 │   ├── GETTING_STARTED.md            Complete installation and first-use guide
 │   └── plugin/                       Plugin distribution: plugin.json, install scripts
 │
+├── Compute/                          Development workstation profile
+│   ├── COMPUTE.md                    HotStuff hardware, AI infra, capabilities
+│   └── Compute.gif                   HotStuff workstation visual
+│
+├── Project/                          Project management (PMP)
+│   └── PROJECT.md                    PMBOK-aligned plan: charter, scope, schedule,
+│                                     cost, quality, risk, lessons learned
+│
 ├── docs/                             Cross-cutting documentation
 │   ├── adr/                          Architecture Decision Records
 │   ├── architecture/                 Data flow, queue architecture, model abstraction
@@ -518,6 +540,85 @@ WindOH/
 │
 └── .gitignore
 ```
+
+---
+
+## Project Directory
+
+### Project Charter
+
+WindOH is a sole-author, full-stack security intelligence platform spanning five independent Rust binaries, a TypeScript/Next.js behavioral intelligence application, and a 40-module Python developer-tooling plugin. Every component was designed, architected, and implemented by a single engineer over approximately one calendar year -- encompassing systems programming, full-stack web development, AI/LLM integration, cryptographic engineering, Windows kernel instrumentation, and security operations tooling.
+
+The public-facing repository was assembled, documented, and packaged in 3 days using LessToil for structural codebase intelligence, cross-reference validation, and documentation generation.
+
+### Development Timeline
+
+| Phase | Calendar Period | Primary Effort | Artifacts |
+|-------|----------------|----------------|-----------|
+| **I: Foundation** | Months 1-3 | Rust systems programming, ETW kernel instrumentation, cryptographic tokenization design | LongHorizons Agent core pipeline, stable token / payload token separation, AES-256-GCM encryption, Count-Min Sketch baselining |
+| **II: Intelligence Layer** | Months 4-6 | TypeScript full-stack, Next.js 14, tRPC API, MongoDB schema design, BullMQ job orchestration | WindOH Application, LLM enrichment worker, Markov sequence engine, SearXNG client |
+| **III: Forensics Toolchain** | Months 7-8 | Rust embedding (Volatility 3, Python 3.9, KAPE, PsExec, Hayabusa, Eric Zimmerman tools), parallel plugin execution | LessVolatile (68 plugins, cross-case fingerprinting), OneDriveStandaloneUpdaterr (4-dimension forensic triage) |
+| **IV: Adversary Emulation** | Months 9-10 | Atomic Red Team YAML embedding, multi-threaded execution harness, variable interpolation engine | LessAtomic (265 techniques, 752 tests, Rayon work-stealing) |
+| **V: Developer Tooling** | Months 11-12 | Tree-sitter grammar integration (41 languages), SQLite knowledge graph, Claude Code plugin architecture | LessToil (40 modules, 26-table schema, SimHash dedup, architectural governance) |
+| **VI: Documentation & Assembly** | 3 days | Indexing, cross-referencing, packaging, public repository construction | 60 commits, 6 visual assets, 20+ markdown documents, all READMEs, ADRs, architecture docs |
+
+### Resource Profile
+
+| Resource | Allocation |
+|----------|-----------|
+| **Engineers** | 1 (sole author -- architecture, development, documentation, visual design) |
+| **Disciplines** | Rust systems programming, TypeScript full-stack, Python developer tooling, AI/LLM prompt engineering, Windows kernel internals, cryptographic engineering, security operations, technical writing |
+| **Hardware** | HotStuff workstation (96 logical processors, 1.5 TB ECC RAM, dual RTX 5090 64 GB VRAM) for local LLM inference, parallel builds, and multi-VM test environments |
+| **External Dependencies** | Atomic Red Team test library (Red Canary, MIT-licensed), Volatility 3 (Volatility Foundation), KAPE (Kroll, Eric Zimmerman), tree-sitter grammars (open-source) |
+
+### Cost Analysis
+
+Security engineering and systems development at this depth commands a market rate of approximately $200/hour for the multi-disciplinary skill set required (Rust kernel instrumentation, TypeScript full-stack, AI/LLM integration, cryptographic engineering).
+
+| Line Item | Basis | Estimate |
+|-----------|-------|----------|
+| **Development labor** | ~2,000 hours over ~12 months (sole author, full-stack across 3 languages + 5 binaries + 1 web app + 1 plugin) | $400,000 |
+| **Infrastructure** | HotStuff workstation acquisition and component sourcing (hand-built from bare case: dual Xeon Platinum 8260, 1.5 TB ECC DDR4, dual RTX 5090, NVMe/SSD/HDD storage) | $25,000-$35,000 |
+| **Tooling & Services** | GitHub, domain registration, CI/CD, Elasticsearch/MongoDB/Redis hosting for validation | $3,000-$5,000 |
+| **Total Estimated Investment** | | **$428,000-$440,000** |
+
+### Component Status Dashboard
+
+| Component | Status | Binary Size | Test Coverage | Documentation | Visual |
+|-----------|--------|------------|---------------|---------------|--------|
+| **LongHorizons Agent** | Validating against ART coverage matrix | ~8 MB | 47 ETW providers active | README, Architecture, ES Templates, Config Guide, CONFIG-GUIDE | Wizard.gif |
+| **WindOH Application** | windoh.us launch pending | N/A (web app) | Enrichment pipeline validated | WindOH.md (full architecture + implementation plan) | Nice.gif |
+| **LessAtomic** | Released v0.1.0 | ~5 MB (pre-built ~168 MB with embedded deps) | 265 techniques, 752 tests | README, Quickstart, Release Notes | AtomicRedTeam.png |
+| **LessVolatile** | Released v0.2.0 | ~129 MB (embedded Volatility 3 + Python 3.9) | 68 Windows plugins, 29 Linux, 26 macOS | README, Release Notes | -- |
+| **OneDriveStandaloneUpdaterr** | Released | ~324 MB (embedded KAPE + PsExec + Hayabusa + EZ Tools) | 4-dimension collection (filesystem, live response, PowerShell, memory/disk) | README, Features, Usage | OneDriveStandaloneUpdaterr.gif |
+| **LessToil** | Released | N/A (Claude Code plugin) | 56 languages, 14 architectural domains | README, Architecture, Use Cases, FAQ, Contributing, Getting Started | -- |
+| **HotStuff Workstation** | Operational | N/A (hardware) | 96 logical processors, 1.5 TB ECC, 64 GB VRAM | COMPUTE.md | Compute.gif |
+
+### Milestone Schedule
+
+| Milestone | Target | Dependencies | Status |
+|-----------|--------|-------------|--------|
+| **M1: LessAtomic Release** | Complete | Build system, embedded YAML validation, Rayon thread pool | Done |
+| **M2: LessVolatile + OneDriveStandaloneUpdaterr Release** | Complete | Embedded dependency resolution, cross-case fingerprinting | Done |
+| **M3: LessToil Public Distribution** | Complete | install.ps1 / install.sh, tree-sitter grammars, plugin.json | Done |
+| **M4: LongHorizons Agent Validation** | In progress | Full ART coverage matrix pass, config.toml finalization, service hardening | 80% |
+| **M5: WindOH Application Deployment** | Pending | windoh.us DNS/SSL, Elasticsearch/MongoDB/Redis provisioning, vLLM endpoint integration | Planned |
+| **M6: Platform Integration Testing** | Pending | M4 + M5 complete, end-to-end telemetry pipeline (agent -> ES -> API -> LLM -> MongoDB), Markov chain validation | Planned |
+| **M7: Cross-Platform Agent Expansion** | Pending | Linux auditd/eBPF agent, macOS ESF agent, Kubernetes audit agent | Planned |
+
+### Forward Plan
+
+The immediate next phase integrates the remaining agents into a unified telemetry pipeline:
+
+1. **LongHorizons Agent Validation (M4)**: Complete the Atomic Red Team coverage matrix pass. Every technique with a detectable ETW footprint must produce a corresponding stable token. Gaps identified and documented.
+
+2. **WindOH Application Deployment (M5)**: Provision windoh.us infrastructure. Deploy the Next.js application with tRPC API, BullMQ worker, and MongoDB/Redis persistence. Configure the local vLLM endpoint (PartiriOne 35B on HotStuff) as the enrichment inference target.
+
+3. **End-to-End Integration Testing (M6)**: Full pipeline validation -- LongHorizons Agent captures ETW events, exports to Elasticsearch, WindOH API polls and enriches, Markov engine builds transition matrices, SearXNG client correlates IOCs. Measure: tokenization throughput, enrichment latency, Markov prediction accuracy.
+
+4. **Cross-Platform Agent Development (M7)**: Begin Linux (auditd + eBPF), macOS (Endpoint Security Framework), and Kubernetes (audit.k8s.io) agent implementation. Each platform reuses the identical stable token / payload token architecture validated on Windows.
+
+All forward development uses LessToil for codebase intelligence during implementation and the HotStuff workstation for local inference, parallel builds, and multi-VM test orchestration.
 
 ---
 
