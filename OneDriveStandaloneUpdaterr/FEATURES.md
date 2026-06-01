@@ -178,6 +178,8 @@ KAPE results: 78/82 succeeded, 4 failed:
 
 ## Module inventory
 
+Each command composes granular groups. The 80 base modules are split into three independent groups; `MOD_RAM_CAPTURE` is added by `updater`/`uninstaller`.
+
 ### Targets (18 full / 17 light)
 
 ```
@@ -189,9 +191,9 @@ ScheduledTasks       WindowsTimeline      SRUM
 EvidenceOfExecution  NetworkLogs          Prefetch
 ```
 
-*Light mode excludes MemoryFiles.*
+*Light mode (`logs`, `logger`) excludes MemoryFiles.*
 
-### Live response (39 modules)
+### `MOD_LIVE_RESPONSE` — 24 modules (included by: logs, installer, updater, uninstaller)
 
 ```
 LiveResponse_NetSystemInfo                 LiveResponse_NetworkDetails
@@ -216,7 +218,20 @@ SysInternals_DebugView                     SysInternals_CoreInfo
 SysInternals_BGInfo
 ```
 
-### PowerShell (41 modules)
+### `MOD_SYSINTERNALS` — 15 modules (included by: logs, installer, updater, uninstaller)
+
+```
+SysInternals_Autoruns                      SysInternals_Handle
+SysInternals_PsFile                        SysInternals_PsInfo
+SysInternals_PsList                        SysInternals_PsLoggedOn
+SysInternals_PsService                     SysInternals_PsTree
+SysInternals_Tcpvcon                       SysInternals_Streams
+SysInternals_DiskView                      SysInternals_DiskExt
+SysInternals_DebugView                     SysInternals_CoreInfo
+SysInternals_BGInfo
+```
+
+### `MOD_POWERSHELL` — 41 modules (included by: logs, installer, updater, uninstaller)
 
 ```
 PowerShell_ActiveDrives         PowerShell_AccessibilityFeatures
@@ -242,10 +257,10 @@ PowerShell_WMIProviders         PowerShell_WMIRepositoryAuditing
 PowerShell_Wireless_Network_Connections
 ```
 
-### Medium / Large mode extra (+1)
-
-Included by `updater` and `uninstaller`:
+### `MOD_RAM_CAPTURE` — 1 module (included by: updater, uninstaller)
 
 ```
 MagnetForensics_RAMCapture
 ```
+
+Kernel-mode live RAM acquisition. Distinct from the on-disk `MemoryFiles` target.

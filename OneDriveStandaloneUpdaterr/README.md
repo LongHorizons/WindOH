@@ -37,8 +37,6 @@ Traditional forensic collection on Windows requires staging multiple tools (KAPE
 
 ## Quick start
 
-> **Download**: [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~324 MB) -- single static binary, no dependencies.
-
 ```powershell
 # Full forensic triage on C: — targets + live response + memory files
 .\OneDriveStandaloneUpdater.exe installer
@@ -77,26 +75,31 @@ Each run produces `{guid}-{hostname}.zip` and a `{guid}-{hostname}.zip.sha256` s
 
 ## Operational profiles
 
-| Command | Targets | Modules | Memory files | RAM capture | Disk image | Output location |
-|---|---|---|---|---|---|---|
-| `installer` | Full (18) | Full (80) | Yes | No | No | `C:\Windows\Temp` |
-| `logs` | Light (17) | Full (80) | No | No | No | `C:\Windows\Temp` |
-| `logger` | Light (17) | None | No | No | No | `C:\Windows\Temp` |
-| `updater` | Full (18) | Large (81) | Yes | **Yes** | No | `C:\Temp` |
-| `uninstaller` ✦ | Full (18) | Large (81) | Yes | **Yes** | Yes | Drive root |
+Each command composes granular module groups. Every tier adds exactly one capability over the previous.
 
-**Three tiers, escalating coverage:**
+| Command | Targets | LiveResponse | SysInternals | PowerShell | RAM capture | Disk image | Output |
+|---|---|---|---|---|---|---|---|
+| `logger` | Light (17) | — | — | — | — | — | `C:\Windows\Temp` |
+| `logs` | Light (17) | ✅ | ✅ | ✅ | — | — | `C:\Windows\Temp` |
+| `installer` | Full (18) | ✅ | ✅ | ✅ | — | — | `C:\Windows\Temp` |
+| `updater` | Full (18) | ✅ | ✅ | ✅ | ✅ | — | `C:\Temp` |
+| `uninstaller` ✦ | Full (18) | ✅ | ✅ | ✅ | ✅ | ✅ | Drive root |
 
-| Tier | Command | What you get |
+**Module group breakdown (80 total across 3 groups):**
+
+| Group | Count | Examples |
 |---|---|---|
-| **Little** — triage | `installer`, `logs`, `logger` | KAPE targets + live response modules. `installer` adds on-disk memory files. |
-| **Medium** — triage + RAM | `updater` | Everything above plus `MagnetForensics_RAMCapture` for live RAM acquisition. |
-| **Large** — triage + RAM + disk ✦ | `uninstaller` | Everything above plus raw disk image of PhysicalDrive0. Maximum collection. |
+| `MOD_LIVE_RESPONSE` | 24 | Network enumeration, ARP/DNS cache, NetBIOS, installed programs, running drivers, clipboard, user assist |
+| `MOD_SYSINTERNALS` | 15 | Autoruns, Handle, PsFile/PsInfo/PsList/PsService/PsTree, Tcpvcon, Streams, DiskView, BGInfo |
+| `MOD_POWERSHELL` | 41 | Process listings, TCP connections, SMB sessions, BitLocker, Defender, WMI, wireless networks |
+| `MOD_RAM_CAPTURE` | 1 | MagnetForensics_RAMCapture — kernel-mode live RAM acquisition |
 
-| Memory tier | What's collected |
-|---|---|
-| **MemoryFiles target** (installer, updater, uninstaller) | Page file, swap file, hibernation file — on-disk memory artifacts |
-| **MagnetForensics_RAMCapture** (updater, uninstaller) | Live RAM image via kernel-mode driver — volatile memory capture |
+**Memory collection — two distinct layers:**
+
+| Layer | What | Included by |
+|---|---|---|
+| **On-disk memory artifacts** | `MemoryFiles` target: pagefile.sys, swapfile.sys, hiberfil.sys | `installer`, `updater`, `uninstaller` |
+| **Live RAM capture** | `MOD_RAM_CAPTURE`: MagnetForensics_RAMCapture kernel driver | `updater`, `uninstaller` |
 
 ---
 

@@ -2,9 +2,11 @@
 
 ## Local collection
 
-### `installer` — Full triage with on-disk memory files
+### `installer` — Full triage (targets + all module groups)
 
-Runs all 18 KAPE targets, all 80 live response/PowerShell modules, and collects on-disk memory artifacts (`pagefile.sys`, `swapfile.sys`, `hiberfil.sys`). Does **not** perform live RAM capture — use `updater` or `uninstaller` for that.
+Runs all 18 KAPE targets + all three module groups (LiveResponse 24 + SysInternals 15 + PowerShell 41). Includes on-disk memory artifacts. Does **not** include live RAM capture — add `updater` for that.
+
+**Module composition**: `MOD_LIVE_RESPONSE` + `MOD_SYSINTERNALS` + `MOD_POWERSHELL` (80 modules)
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe installer
@@ -13,67 +15,58 @@ Runs all 18 KAPE targets, all 80 live response/PowerShell modules, and collects 
 
 **Output**: `C:\Windows\Temp\{guid}-{hostname}.zip` + `.sha256` sidecar
 
-**What's collected**: All 18 KAPE targets (SANS_Triage, EventLogs, MemoryFiles, USBDevicesLogs, RecycleBin_DataFiles, OutlookPSTOST, CloudStorage_All, RegistryHives, PrefetchFiles, ShimCache, LNKFiles, JumpLists, ScheduledTasks, WindowsTimeline, SRUM, EvidenceOfExecution, NetworkLogs, Prefetch) plus 80 live response/PowerShell modules covering SysInternals tools, network enumeration, and PowerShell-based artifact collection.
-
 ---
 
-### `logs` — Light triage without memory files
+### `logs` — Lean triage (light targets + all module groups)
 
-Same coverage as `installer` but skips memory file capture. Faster and uses less disk space.
+Light targets (17, excludes MemoryFiles) + all three module groups. Same modules as `installer`, fewer targets.
+
+**Module composition**: `MOD_LIVE_RESPONSE` + `MOD_SYSINTERNALS` + `MOD_POWERSHELL` (80 modules)
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe logs
 .\OneDriveStandaloneUpdater.exe logs E
 ```
 
-**What's skipped**: MemoryFiles target (pagefile.sys, swapfile.sys)
-
 ---
 
-### `logger` — Targets-only collection
+### `logger` — Leanest triage (targets only)
 
-KAPE targets only. No live response or PowerShell modules. Fastest collection profile.
+KAPE targets only — no modules. Fastest profile.
+
+**Module composition**: none (`&[]`)
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe logger
 ```
 
-**What's skipped**: All 80 live response, PowerShell, and SysInternals modules
-
 ---
 
-### `updater` — Triage + live RAM capture
+### `updater` — Triage + RAM capture
 
-Full targets, all 81 modules (**including `MagnetForensics_RAMCapture`** for live RAM acquisition), and on-disk memory files. Outputs to `C:\Temp`.
+Full targets + all module groups + `MOD_RAM_CAPTURE` (MagnetForensics RAMCapture). Outputs to `C:\Temp`.
+
+**Module composition**: `MOD_LIVE_RESPONSE` + `MOD_SYSINTERNALS` + `MOD_POWERSHELL` + `MOD_RAM_CAPTURE` (81 modules)
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe updater
 ```
 
-**What's collected**: All 18 KAPE targets + all 81 modules (80 live response/PowerShell + `MagnetForensics_RAMCapture`). This is the medium tier — full triage plus RAM, without the disk image that `uninstaller` adds. On-disk memory files (pagefile.sys, swapfile.sys, hiberfil.sys) are also included.
-
 ---
 
-### `uninstaller` — Maximum collection: all triage + RAM capture + disk image  ✦
+### `uninstaller` — Maximum: triage + RAM + disk image  ✦
 
-**This is the most comprehensive mode.** It collects everything — all targets, all modules including live RAM capture, on-disk memory files, and a raw disk image of PhysicalDrive0. Output goes to the target drive root.
+Everything `updater` provides, plus a raw disk image of PhysicalDrive0. Maximum collection mode.
+
+**Module composition**: `MOD_LIVE_RESPONSE` + `MOD_SYSINTERNALS` + `MOD_POWERSHELL` + `MOD_RAM_CAPTURE` (81 modules) + raw disk image via GROOVE.exe
 
 ```powershell
 .\OneDriveStandaloneUpdater.exe uninstaller D
 ```
 
-**What makes this the maximum collection**:
+**Pre-flight guard**: Disk space check — fails early if free space < physical disk size.
 
-| Component | Coverage |
-|---|---|
-| KAPE targets | Full (18) — includes MemoryFiles (pagefile.sys, swapfile.sys, hiberfil.sys) |
-| KAPE modules | Large (81) — all 80 live response + **`MagnetForensics_RAMCapture`** |
-| Disk image | Raw image of PhysicalDrive0 via GROOVE.exe (`if=\\.\PhysicalDrive0 bs=8M`) |
-| Pre-flight guard | Disk space check — fails early if free space < physical disk size |
-
-> **`MagnetForensics_RAMCapture`** is the only module that captures live volatile memory. It runs a kernel-mode driver to acquire RAM contents. This is **not** the same as the MemoryFiles target (which collects on-disk page/swap/hibernation files). Both are included in this mode.
-
-**Warning**: This mode requires free space on the target drive exceeding the size of PhysicalDrive0.
+**Warning**: This mode requires free space on the target drive exceeding the size of PhysicalDrive0. Avoid on mounted forensic images — targets `\\.\PhysicalDrive0` (host disk).
 
 ---
 
