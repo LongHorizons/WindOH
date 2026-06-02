@@ -364,7 +364,7 @@ if ($ZIP_SOURCE -and -not (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py"))
 # ==============================================================================
 # STEP 1: Fetch plugin from GitHub (if no local source)
 # ==============================================================================
-Write-Step "1/7" "Fetching plugin from GitHub..."
+Write-Step "1/8" "Fetching plugin from GitHub..."
 
 # Determine if we're running from a local clone or need to download
 $LOCAL_PLUGIN_SRC = $null
@@ -435,7 +435,7 @@ Write-OK
 # ==============================================================================
 # STEP 2: Copy plugin files
 # ==============================================================================
-Write-Step "2/7" "Installing plugin files..."
+Write-Step "2/8" "Installing plugin files..."
 
 # Create plugin directory
 if (-not (Test-Path $PLUGIN_DIR)) { New-Item -ItemType Directory -Path $PLUGIN_DIR -Force | Out-Null }
@@ -477,9 +477,35 @@ if (Test-Path $hooksJsonPath) {
 }
 
 # ==============================================================================
-# STEP 3: Install Python dependencies
+# STEP 3: Register plugin in Claude Code settings
 # ==============================================================================
-Write-Step "3/7" "Installing Python dependencies..."
+Write-Step "3/8" "Enabling plugin in Claude Code settings..."
+
+$settingsFile = Join-Path $HOME ".claude\settings.json"
+if (-not (Test-Path $settingsFile)) {
+    @'
+{"enabledPlugins":{"less-toil":true}}
+'@ | Set-Content -Path $settingsFile -Encoding UTF8
+    Write-Detail "Created settings.json with less-toil enabled"
+} else {
+    try {
+        $settingsJson = Get-Content $settingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $settingsJson.enabledPlugins) {
+            $settingsJson | Add-Member -MemberType NoteProperty -Name 'enabledPlugins' -Value @{} -Force
+        }
+        $settingsJson.enabledPlugins | Add-Member -MemberType NoteProperty -Name 'less-toil' -Value $true -Force
+        $settingsJson | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsFile -Encoding UTF8
+        Write-Detail "settings.json updated"
+    } catch {
+        Write-Detail "NOTE: Could not update settings.json (plugin may need manual enable)"
+    }
+}
+Write-Host ""
+
+# ==============================================================================
+# STEP 4: Install Python dependencies
+# ==============================================================================
+Write-Step "4/8" "Installing Python dependencies..."
 
 # Core dependencies
 $CORE_PACKAGES = @("tree-sitter", "pyyaml")
@@ -616,7 +642,7 @@ Write-Host ""
 # ==============================================================================
 # STEP 4: Validate plugin
 # ==============================================================================
-Write-Step "4/7" "Validating core modules..."
+Write-Step "5/8" "Validating core modules..."
 
 $PASSED = 0
 $MODULE_FAILURES = 0
@@ -652,7 +678,7 @@ Write-Host ""
 # STEP 5: Set up project CLAUDE.md
 # ==============================================================================
 if (-not $PluginOnly) {
-    Write-Step "5/7" "Setting up project at $ProjectDir..."
+    Write-Step "6/8" "Setting up project at $ProjectDir..."
 
     $projectClaudeDir = Join-Path $ProjectDir ".claude"
     $projectClaudeFile = Join-Path $projectClaudeDir "CLAUDE.md"
@@ -761,7 +787,7 @@ This project uses the repo-cognition plugin. Query `.claude/index/repo-cognition
 
     Write-Host ""
 } else {
-    Write-Step "5/7" "Skipping project setup (-PluginOnly)"
+    Write-Step "6/8" "Skipping project setup (-PluginOnly)"
     Write-Host ""
 }
 
@@ -769,7 +795,7 @@ This project uses the repo-cognition plugin. Query `.claude/index/repo-cognition
 # STEP 6: Generate index CLAUDE.md
 # ==============================================================================
 if (-not $PluginOnly) {
-    Write-Step "6/7" "Generating index query reference..."
+    Write-Step "7/8" "Generating index query reference..."
 
     $claudeMdScript = Join-Path $PLUGIN_DIR "scripts\generate-claude-md.py"
     if (Test-Path $claudeMdScript) {
@@ -784,7 +810,7 @@ if (-not $PluginOnly) {
     }
     Write-Host ""
 } else {
-    Write-Step "6/7" "Skipping (-PluginOnly)"
+    Write-Step "7/8" "Skipping (-PluginOnly)"
     Write-Host ""
 }
 
@@ -792,7 +818,7 @@ if (-not $PluginOnly) {
 # STEP 7: Run first index (optional)
 # ==============================================================================
 if ($Reindex -and -not $PluginOnly) {
-    Write-Step "7/7" "Running first index build..."
+    Write-Step "8/8" "Running first index build..."
 
     # Clean stale state
     @(
@@ -808,7 +834,7 @@ if ($Reindex -and -not $PluginOnly) {
     $inputJson | & $INSTALL_PYTHON (Join-Path $PLUGIN_DIR "hooks\session_start.py") 2>&1
     Write-Host ""
 } else {
-    Write-Step "7/7" "Skipping index build (use -Reindex to force, or restart Claude Code)"
+    Write-Step "8/8" "Skipping index build (use -Reindex to force, or restart Claude Code)"
     Write-Host ""
 }
 

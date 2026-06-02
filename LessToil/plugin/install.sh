@@ -370,7 +370,7 @@ fi
 # =============================================================================
 # STEP 1: Copy plugin files
 # =============================================================================
-echo "[1/7] Installing plugin files..."
+echo "[1/8] Installing plugin files..."
 
 mkdir -p "$PLUGIN_DIR"
 
@@ -440,9 +440,33 @@ if [ -f "${PLUGIN_DIR}/hooks/hooks.json" ]; then
 fi
 
 # =============================================================================
-# STEP 2: Install Python dependencies
+# STEP 2: Register plugin in Claude Code settings
 # =============================================================================
-echo "[2/7] Installing Python dependencies..."
+echo "[2/8] Enabling plugin in Claude Code settings..."
+SETTINGS_FILE="${HOME}/.claude/settings.json"
+if [ ! -f "$SETTINGS_FILE" ]; then
+    echo '{"enabledPlugins":{"less-toil":true}}' > "$SETTINGS_FILE"
+    echo "      Created settings.json with less-toil enabled"
+else
+    "$INSTALL_PYTHON" -c "
+import json, os
+path = os.path.expanduser('$SETTINGS_FILE')
+with open(path, 'r') as f:
+    cfg = json.load(f)
+if 'enabledPlugins' not in cfg:
+    cfg['enabledPlugins'] = {}
+cfg['enabledPlugins']['less-toil'] = True
+with open(path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+print('      Plugin enabled: less-toil')
+" 2>/dev/null && echo "      settings.json updated" || echo "      NOTE: Could not update settings.json (plugin may need manual enable)"
+fi
+echo ""
+
+# =============================================================================
+# STEP 3: Install Python dependencies
+# =============================================================================
+echo "[3/8] Installing Python dependencies..."
 
 # Core dependencies (required)
 CORE_PACKAGES=("tree-sitter" "pyyaml")
@@ -594,7 +618,7 @@ echo ""
 # =============================================================================
 # STEP 3: Validate plugin
 # =============================================================================
-echo "[3/7] Validating core modules..."
+echo "[4/8] Validating core modules..."
 
 FAILED=0
 PASSED=0
@@ -628,7 +652,7 @@ echo ""
 # STEP 4: Generate project CLAUDE.md (if setting up a project)
 # =============================================================================
 if [ "$PLUGIN_ONLY" = false ]; then
-    echo "[4/7] Setting up project at $PROJECT_DIR..."
+    echo "[5/8] Setting up project at $PROJECT_DIR..."
 
     PROJECT_CLAUDE_DIR="${PROJECT_DIR}/.claude"
     PROJECT_CLAUDE_FILE="${PROJECT_CLAUDE_DIR}/CLAUDE.md"
@@ -759,7 +783,7 @@ CLAUDEEOF
 
     echo ""
 else
-    echo "[4/7] Skipping project setup (--plugin-only)"
+    echo "[5/8] Skipping project setup (--plugin-only)"
     echo ""
 fi
 
@@ -767,7 +791,7 @@ fi
 # STEP 5: Generate index CLAUDE.md template
 # =============================================================================
 if [ "$PLUGIN_ONLY" = false ]; then
-    echo "[5/7] Generating index query reference..."
+    echo "[6/8] Generating index query reference..."
 
     # Run the generate script if available
     CLAUDE_MD_SCRIPT="${PLUGIN_DIR}/scripts/generate-claude-md.py"
@@ -779,7 +803,7 @@ if [ "$PLUGIN_ONLY" = false ]; then
     fi
     echo ""
 else
-    echo "[5/7] Skipping (--plugin-only)"
+    echo "[6/8] Skipping (--plugin-only)"
     echo ""
 fi
 
@@ -787,7 +811,7 @@ fi
 # STEP 6: Run first index (if requested)
 # =============================================================================
 if [ "$DO_REINDEX" = true ] && [ "$PLUGIN_ONLY" = false ]; then
-    echo "[6/7] Running first index build..."
+    echo "[7/8] Running first index build..."
 
     # Remove any stale state
     rm -f "${PROJECT_INDEX_DIR}/index.db" \
@@ -799,7 +823,7 @@ if [ "$DO_REINDEX" = true ] && [ "$PLUGIN_ONLY" = false ]; then
         "$INSTALL_PYTHON" "${PLUGIN_DIR}/hooks/session_start.py" <<< '{"session_id":"install-rebuild","cwd":"'"$PROJECT_DIR"'"}'
     echo ""
 else
-    echo "[6/7] Skipping index build (use --reindex to force, or restart Claude Code)"
+    echo "[7/8] Skipping index build (use --reindex to force, or restart Claude Code)"
     echo ""
 fi
 
@@ -816,7 +840,7 @@ fi
 # =============================================================================
 # STEP 7: Done
 # =============================================================================
-echo "[7/7] Done!"
+echo "[8/8] Done!"
 echo ""
 echo "=============================================="
 echo "  Installation Complete"
