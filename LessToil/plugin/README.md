@@ -117,12 +117,12 @@ All answers are prefixed with `[index]` (queried the database) or `[grep]` (fell
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 ```
 
 ### macOS / Linux (Bash)
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 ```
 
 ### Offline (from release zip)

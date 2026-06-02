@@ -66,7 +66,7 @@ If Python is not found on Windows, run `where.exe python`. If missing, install f
 Run from your project directory:
 
 ```powershell
-irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 ```
 
 #### From Local Clone
@@ -100,7 +100,7 @@ Set-Location $env:TEMP\claude-code\plugins\repo-cognition
 Run from your project directory:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 ```
 
 #### From Local Clone

@@ -11,7 +11,7 @@
 #   bash install.sh --no-venv                # Skip venv creation, use system Python directly
 #
 # One-liner (from GitHub):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 #
 # Installs plugin to ~/.claude/plugins/repo-cognition/ and sets up the target project.
 # Source priority: --from-zip FILE → local clone (if running from plugin dir) → GitHub clone

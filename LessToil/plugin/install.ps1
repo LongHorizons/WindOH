@@ -47,7 +47,7 @@
     Installs from a local release zip without any prompts.
 
 .EXAMPLE
-    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1").Content
+    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1").Content
     One-liner from GitHub (run from your project directory).
 #>
 
@@ -99,7 +99,7 @@ Options:
 Source priority: -FromZip > local clone > GitHub
 
 One-liner from GitHub:
-  irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
+  irm https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1 | iex
 "@ | Write-Host
     exit 0
 }
