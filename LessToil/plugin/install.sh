@@ -400,6 +400,9 @@ copy_dir "${SCRIPT_DIR}/hooks" "${PLUGIN_DIR}/hooks" "hooks"
 
 # Commands
 copy_dir "${SCRIPT_DIR}/commands" "${PLUGIN_DIR}/commands" "commands"
+# Also install to ~/.claude/commands/ for slash-command discovery
+mkdir -p "${HOME}/.claude/commands"
+copy_dir "${SCRIPT_DIR}/commands" "${HOME}/.claude/commands" "user commands"
 
 # Agents
 copy_dir "${SCRIPT_DIR}/agents" "${PLUGIN_DIR}/agents" "agents"

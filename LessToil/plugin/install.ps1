@@ -456,6 +456,12 @@ function Copy-PluginDir {
 Copy-PluginDir "core modules"       "core"              "core"
 Copy-PluginDir "hooks"              "hooks"             "hooks"
 Copy-PluginDir "commands"           "commands"          "commands"
+# Also install to ~/.claude/commands/ for slash-command discovery
+$userCommandsDir = Join-Path $HOME ".claude\commands"
+if (-not (Test-Path $userCommandsDir)) { New-Item -ItemType Directory -Path $userCommandsDir -Force | Out-Null }
+Copy-Item -Path (Join-Path $LOCAL_PLUGIN_SRC "commands\*") -Destination $userCommandsDir -Force -ErrorAction SilentlyContinue
+$cmdCount = (Get-ChildItem $userCommandsDir -File).Count
+Write-Detail "user commands ($cmdCount files)"
 Copy-PluginDir "agents"             "agents"            "agents"
 Copy-PluginDir "skills"             "skills"            "skills"
 Copy-PluginDir "scripts"            "scripts"           "scripts"
