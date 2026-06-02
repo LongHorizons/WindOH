@@ -268,6 +268,30 @@ if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     fi
 fi
 
+# After GitHub clone: extract repo-cognition.zip if present
+if [ -z "$ZIP_SOURCE" ] && [ -f "${SCRIPT_DIR}/repo-cognition.zip" ]; then
+    ZIP_SOURCE="${SCRIPT_DIR}/repo-cognition.zip"
+fi
+if [ -n "$ZIP_SOURCE" ] && [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
+    ZIP_TEMP="$(mktemp -d)"
+    echo "      Using release zip: $ZIP_SOURCE"
+    if command -v unzip &>/dev/null; then
+        unzip -q "$ZIP_SOURCE" -d "$ZIP_TEMP"
+    elif "$INSTALL_PYTHON" -c "import zipfile" 2>/dev/null; then
+        "$INSTALL_PYTHON" -c "
+import zipfile, os
+zf = zipfile.ZipFile('$ZIP_SOURCE')
+zf.extractall('$ZIP_TEMP')
+print(f'Extracted {len(zf.namelist())} files')
+"
+    else
+        echo "ERROR: Neither 'unzip' nor Python zipfile available. Install unzip or Python."
+        exit 1
+    fi
+    SCRIPT_DIR="$ZIP_TEMP"
+    echo "      Extracted to: $ZIP_TEMP"
+fi
+
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     echo "ERROR: Plugin source not found. Ensure core/manifest.py exists in the source."
     exit 1

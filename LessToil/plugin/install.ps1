@@ -317,6 +317,21 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
     }
 }
 
+# After clone: extract repo-cognition.zip if present
+$ZIP_CANDIDATE = Join-Path $LOCAL_PLUGIN_SRC "repo-cognition.zip"
+if ((Test-Path $ZIP_CANDIDATE) -and (-not (Test-Path (Join-Path $LOCAL_PLUGIN_SRC "core\manifest.py")))) {
+    $ZIP_EXTRACT_DIR = Join-Path ([System.IO.Path]::GetTempPath()) "less-toil-plugin-$PID"
+    Write-Detail "Extracting release zip to: $ZIP_EXTRACT_DIR"
+    try {
+        Expand-Archive -Path $ZIP_CANDIDATE -DestinationPath $ZIP_EXTRACT_DIR -Force
+        $LOCAL_PLUGIN_SRC = $ZIP_EXTRACT_DIR
+        Write-Detail "Extracted $(($(Get-ChildItem -Recurse -File $ZIP_EXTRACT_DIR).Count)) files"
+    } catch {
+        Write-Err "Failed to extract repo-cognition.zip from $ZIP_CANDIDATE"
+        exit 1
+    }
+}
+
 if (-not $LOCAL_PLUGIN_SRC -or -not (Test-Path (Join-Path $LOCAL_PLUGIN_SRC "core\manifest.py"))) {
     Write-Err "Plugin source not found at: $LOCAL_PLUGIN_SRC"
     exit 1
