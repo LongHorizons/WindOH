@@ -12,10 +12,6 @@
   <img src="Compute/Compute.gif" alt="HotStuff Workstation">
 </p>
 
-<p align="center">
-  <em>6 visuals across the project -- 4 GIFs (Nice.gif, Wizard.gif, OneDriveStandaloneUpdaterr.gif, Compute.gif) and 2 PNGs (windOH.png, LessAtomic/AtomicRedTeam.png) documenting every major surface.</em>
-</p>
-
 **Behavioral telemetry collection and analysis, memory forensics at scale, covert forensic triage, and multi-threaded Atomic Red Team execution for Windows environments.**
 
 ---
