@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LessToil Plugin — Standalone Installer
+# LessToil Plugin -- Standalone Installer
 #
 # Usage:
 #   bash install.sh                          # Install plugin + set up current project
@@ -14,9 +14,9 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 #
 # Installs plugin to ~/.claude/plugins/repo-cognition/ and sets up the target project.
-# Source priority: --from-zip FILE → local clone (if running from plugin dir) → GitHub clone
+# Source priority: --from-zip FILE -> local clone (if running from plugin dir) -> GitHub clone
 
-# Require bash — pipefail, [[, and local are bashisms not available in sh/dash
+# Require bash -- pipefail, [[, and local are bashisms not available in sh/dash
 if [ -z "${BASH_VERSION:-}" ]; then
     echo "ERROR: This installer requires bash. Please run: bash install.sh"
     echo "       Avoid:  sh install.sh"
@@ -77,48 +77,116 @@ if [ "$PLUGIN_ONLY" = false ] && [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-# --- Detect Python ----------------------------------------------------------
+# --- Detect Python (best-effort: PATH, common locations, versioned names) ---------
 PYTHON=""
-for candidate in python3 python; do
-    if command -v "$candidate" &>/dev/null; then
-        case "$("$candidate" --version 2>&1)" in
-            "Python 3."*) PYTHON="$candidate"; break ;;
-        esac
+
+# Helper: test if a Python binary is usable (exists, runs, version >= 3.8)
+test_python() {
+    local bin="$1"
+    local ver
+    ver="$("$bin" --version 2>/dev/null)" || return 1
+    case "$ver" in
+        "Python 3."*)
+            local minor
+            minor=$(echo "$ver" | sed 's/.*Python 3\.\([0-9]*\).*/\1/')
+            [ "$minor" -ge 8 ] 2>/dev/null && return 0
+            ;;
+    esac
+    return 1
+}
+
+# Pass 1: scan PATH for versioned names (python3.13 -> python3.8), then python3, then python
+for candidate in python3.13 python3.12 python3.11 python3.10 python3.9 python3.8 python3 python; do
+    if command -v "$candidate" &>/dev/null && test_python "$candidate"; then
+        PYTHON="$candidate"
+        break
     fi
 done
 
-# Auto-install Python if missing and --accept was given
-if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
-    echo "Python 3.8+ not found. --accept: attempting auto-install..."
-    if command -v apt-get &>/dev/null; then
-        echo "      Detected apt-get — installing python3..."
-        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
-    elif command -v brew &>/dev/null; then
-        echo "      Detected Homebrew — installing python3..."
-        brew install python3 2>&1 || true
-    elif command -v dnf &>/dev/null; then
-        echo "      Detected dnf — installing python3..."
-        sudo dnf install -y python3 python3-pip 2>&1 || true
-    elif command -v pacman &>/dev/null; then
-        echo "      Detected pacman — installing python3..."
-        sudo pacman -S --noconfirm python python-pip 2>&1 || true
-    elif command -v apk &>/dev/null; then
-        echo "      Detected apk — installing python3..."
-        sudo apk add python3 py3-pip 2>&1 || true
-    fi
-    # Re-detect
-    for candidate in python3 python; do
-        if command -v "$candidate" &>/dev/null; then
-            case "$("$candidate" --version 2>&1)" in
-                "Python 3."*) PYTHON="$candidate"; break ;;
-            esac
-        fi
+# Pass 2: scan common install directories (Python might be installed but not on PATH)
+if [ -z "$PYTHON" ]; then
+    for root in \
+        /usr/bin \
+        /usr/local/bin \
+        /opt/homebrew/bin \
+        /home/linuxbrew/.linuxbrew/bin \
+        "$HOME/.local/bin"; do
+        for pattern in python3.1[3-9] python3.1[0-2] python3.[8-9] python3 python; do
+            for found in "$root"/$pattern; do
+                if [ -f "$found" ] && [ -x "$found" ] && test_python "$found"; then
+                    PYTHON="$found"
+                    echo "      Found Python in $root: $PYTHON"
+                    break 3
+                fi
+            done
+        done
     done
 fi
 
+# Auto-install Python if still not found and user consented
+if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
+    echo ""
+    echo "Python 3.8+ not found in PATH or common install locations."
+    echo "--accept: attempting automatic installation (best-effort)..."
+    echo ""
+    if command -v apt-get &>/dev/null; then
+        echo "      Detected apt-get -- installing python3, pip, venv..."
+        sudo apt-get update -qq 2>&1 | tail -1
+        sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 | tail -3 || true
+    elif command -v brew &>/dev/null; then
+        echo "      Detected Homebrew -- installing python@3.12..."
+        brew install python@3.12 2>&1 | tail -3 || true
+    elif command -v dnf &>/dev/null; then
+        echo "      Detected dnf -- installing python3, pip..."
+        sudo dnf install -y python3 python3-pip 2>&1 | tail -3 || true
+    elif command -v yum &>/dev/null; then
+        echo "      Detected yum -- installing python3, pip..."
+        sudo yum install -y python3 python3-pip 2>&1 | tail -3 || true
+    elif command -v pacman &>/dev/null; then
+        echo "      Detected pacman -- installing python, pip..."
+        sudo pacman -S --noconfirm python python-pip 2>&1 | tail -3 || true
+    elif command -v apk &>/dev/null; then
+        echo "      Detected apk -- installing python3..."
+        sudo apk add python3 py3-pip 2>&1 | tail -3 || true
+    elif command -v zypper &>/dev/null; then
+        echo "      Detected zypper -- installing python3..."
+        sudo zypper install -y python3 python3-pip 2>&1 | tail -3 || true
+    fi
+    # Re-scan after attempted install
+    for candidate in python3.12 python3.11 python3.10 python3.9 python3.8 python3 python; do
+        if command -v "$candidate" &>/dev/null && test_python "$candidate"; then
+            PYTHON="$candidate"
+            echo "      Auto-installed Python: $PYTHON"
+            break
+        fi
+    done
+    # Also check direct paths after install
+    if [ -z "$PYTHON" ]; then
+        for root in /usr/bin /usr/local/bin /opt/homebrew/bin "$HOME/.local/bin"; do
+            for candidate in python3.12 python3.11 python3.10 python3.9 python3.8 python3 python; do
+                if [ -f "$root/$candidate" ] && test_python "$root/$candidate"; then
+                    PYTHON="$root/$candidate"
+                    echo "      Auto-installed Python: $PYTHON"
+                    break 2
+                fi
+            done
+        done
+    fi
+fi
+
 if [ -z "$PYTHON" ]; then
-    echo "ERROR: Python 3.8+ required but not found. Install from https://python.org"
-    echo "       Or re-run with --accept to attempt automatic installation."
+    echo ""
+    echo "ERROR: Python 3.8+ could not be located or installed automatically."
+    echo ""
+    echo "Install Python manually:"
+    echo "  Ubuntu/Debian:  sudo apt install python3 python3-pip python3-venv"
+    echo "  Fedora/RHEL:    sudo dnf install python3 python3-pip"
+    echo "  macOS (Homebrew): brew install python@3.12"
+    echo "  Arch:           sudo pacman -S python python-pip"
+    echo "  Alpine:         sudo apk add python3 py3-pip"
+    echo "  openSUSE:       sudo zypper install python3 python3-pip"
+    echo ""
+    echo "Or re-run with --accept to attempt automatic installation."
     exit 1
 fi
 
@@ -129,6 +197,8 @@ if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 8 ]); th
     exit 1
 fi
 
+echo "      Resolved Python: $PYTHON ($("$PYTHON" --version 2>&1))"
+
 # All Python references from here onward use INSTALL_PYTHON (may be venv or system)
 INSTALL_PYTHON="$PYTHON"
 
@@ -138,7 +208,7 @@ if [ "$NO_VENV" = false ]; then
     if [ ! -d "$VENV_DIR" ]; then
         echo "Creating shared venv at $VENV_DIR ..."
         "$INSTALL_PYTHON" -m venv "$VENV_DIR" 2>/dev/null || {
-            echo "      WARNING: venv creation failed — falling back to system Python."
+            echo "      WARNING: venv creation failed -- falling back to system Python."
             echo "      You may need to install python3-venv (apt) or equivalent."
             NO_VENV=true
         }
@@ -152,7 +222,7 @@ if [ "$NO_VENV" = false ]; then
             VENV_PYTHON="${VENV_DIR}/bin/python3"
             VENV_PIP="${VENV_DIR}/bin/pip3"
         else
-            echo "      WARNING: venv python not found — falling back to system Python."
+            echo "      WARNING: venv python not found -- falling back to system Python."
             NO_VENV=true
         fi
     fi
@@ -172,7 +242,7 @@ fi
 
 echo ""
 echo "=============================================="
-echo "  LessToil Plugin v0.4.0 — Installer"
+echo "  LessToil Plugin v0.4.0 -- Installer"
 echo "=============================================="
 echo "  Python:   $INSTALL_PYTHON ($("$INSTALL_PYTHON" --version 2>&1))"
 if [ -n "$VENV_DIR" ]; then
@@ -185,7 +255,7 @@ echo "=============================================="
 echo ""
 
 # =============================================================================
-# STEP 0: Resolve plugin source (zip → local → GitHub)
+# STEP 0: Resolve plugin source (zip -> local -> GitHub)
 # =============================================================================
 ZIP_SOURCE=""
 ZIP_TEMP=""
@@ -377,7 +447,7 @@ echo "[2/7] Installing Python dependencies..."
 # Core dependencies (required)
 CORE_PACKAGES=("tree-sitter" "pyyaml")
 
-# All available tree-sitter grammar packages — pip name → python import name
+# All available tree-sitter grammar packages -- pip name -> python import name
 # Format: "pip-name|import-name"
 GRAMMAR_PACKAGES=(
     "tree-sitter-python|tree_sitter_python"
@@ -491,7 +561,7 @@ if [ ${#INSTALL_LIST[@]} -gt 0 ]; then
         echo "      To install manually:"
         echo "        pip install ${FAILED_PACKAGES[*]}"
         echo ""
-        echo "      ${DIM}Missing grammars do NOT affect indexing — all 56 languages"
+        echo "      ${DIM}Missing grammars do NOT affect indexing -- all 56 languages"
         echo "      are supported via regex fallback. Tree-sitter grammars"
         echo "      provide higher-accuracy symbol extraction only.${RESET}"
         echo "      ─────────────────────────────────────────────"
@@ -550,7 +620,7 @@ print(f'      Schema v{SCHEMA_VERSION} ready')
 if "$INSTALL_PYTHON" -c "$VERIFY_SCRIPT" 2>/dev/null; then
     echo "      Plugin verified."
 else
-    echo "      WARNING: Plugin import check failed — may need manual inspection."
+    echo "      WARNING: Plugin import check failed -- may need manual inspection."
 fi
 echo ""
 
@@ -616,7 +686,7 @@ ${LANG_HINT:+${LANG_HINT} project.}${WORKSPACE_INFO:+ ${WORKSPACE_INFO}}
 
 ### How to Query the Index
 
-**Always use Python** — Python's \`sqlite3\` module is in the standard library and works on every platform. The plugin also provides a query helper:
+**Always use Python** -- Python's \`sqlite3\` module is in the standard library and works on every platform. The plugin also provides a query helper:
 
 \`\`\`bash
 # Primary: Query helper script (predefined queries)
@@ -639,7 +709,7 @@ for row in conn.execute('SELECT ...'):
 
 If the \`sqlite3\` CLI happens to be available: \`sqlite3 .claude/index/repo-cognition/index.db "SELECT ..."\`
 
-### CRITICAL — Citation Requirement
+### CRITICAL -- Citation Requirement
 
 **Every codebase answer you give MUST cite its data source.** This is how the user knows the plugin is working:
 
@@ -657,7 +727,7 @@ This applies to ALL agents and sub-agents. If the user sees \`[grep]\` repeatedl
 | "Where is X defined?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --symbol X\` |
 | "Who calls X?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --callers X\` |
 | "What does X call?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py "SELECT ce.callee_name, ce.callee_file FROM call_edges ce JOIN symbols s ON ce.caller_id = s.id WHERE s.name = 'X'"\` |
-| "Impact of changing X?" | Recursive CTE — see \`.claude/index/repo-cognition/CLAUDE.md\` for full query |
+| "Impact of changing X?" | Recursive CTE -- see \`.claude/index/repo-cognition/CLAUDE.md\` for full query |
 | "Is X dead code?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --orphans\` then grep for X |
 | "Has duplicates of X?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --duplicates\` |
 | "Hotspots / most-called?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --hotspots\` |
@@ -666,17 +736,17 @@ This applies to ALL agents and sub-agents. If the user sees \`[grep]\` repeatedl
 | "Riskiest files?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --riskiest\` |
 
 ### Plugin Commands
-\`/index-status\` — full dashboard | \`/index-rebuild\` — force rebuild | \`/index-graph <name>\` — call graph | \`/index-graph --hotspots\` — most-called | \`/index-graph --orphans\` — dead code
+\`/index-status\` -- full dashboard | \`/index-rebuild\` -- force rebuild | \`/index-graph <name>\` -- call graph | \`/index-graph --hotspots\` -- most-called | \`/index-graph --orphans\` -- dead code
 
 ### Skill
-\`LessToil Query\` — auto-activates on structural questions. Follow its instructions.
+\`LessToil Query\` -- auto-activates on structural questions. Follow its instructions.
 
 ### Grep/Glob
 ONLY for: literal strings in source, \`#\[derive(...)\]\`, constructors like \`X::new()\`, or code not tracked by the index.
 CLAUDEEOF
         echo "      Created ${PROJECT_CLAUDE_FILE}"
     else
-        echo "      CLAUDE.md already exists — skipping"
+        echo "      CLAUDE.md already exists -- skipping"
         # Check if it references the index; if not, append a note
         if ! grep -q "repo-cognition" "$PROJECT_CLAUDE_FILE" 2>/dev/null; then
             echo "" >> "$PROJECT_CLAUDE_FILE"

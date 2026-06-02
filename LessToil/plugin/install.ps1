@@ -1,7 +1,7 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    LessToil Plugin — PowerShell Installer for Windows
+    LessToil Plugin -- PowerShell Installer for Windows
 .DESCRIPTION
     Installs the repo-cognition plugin to ~/.claude/plugins/repo-cognition/
     by fetching the plugin from GitHub and setting up the target project.
@@ -110,67 +110,160 @@ if (-not $PluginOnly -and -not (Test-Path $ProjectDir)) {
     exit 1
 }
 
-# --- Detect Python -------------------------------------------------------------
+# --- Detect Python (best-effort: PATH, py launcher, install dirs, versioned names) -----
 $PYTHON = $null
-foreach ($candidate in @("python3", "python")) {
+
+function Test-PythonBinary {
+    param([string]$Path)
     try {
-        $ver = & $candidate --version 2>&1
-        if ($ver -match "Python 3\.(\d+)") {
-            $minor = [int]$Matches[1]
-            if ($minor -ge 8) {
-                $PYTHON = $candidate
+        $ver = & $Path --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $ver -match "Python 3\.(\d+)") {
+            if ([int]$Matches[1] -ge 8) { return $true }
+        }
+    } catch { }
+    return $false
+}
+
+# Pass 1: scan PATH for python3 / python plus versioned names
+$pathCandidates = @(
+    "python3.13", "python3.12", "python3.11", "python3.10", "python3.9", "python3.8",
+    "python3", "python"
+)
+foreach ($c in $pathCandidates) {
+    if (Test-PythonBinary $c) { $PYTHON = $c; break }
+}
+
+# Pass 2: try the Windows py launcher (finds all installed Pythons, even off-PATH)
+if (-not $PYTHON) {
+    try {
+        $pyLauncher = Get-Command py -ErrorAction Stop
+        # Ask py which python3.8+ it knows about
+        foreach ($minor in @(13, 12, 11, 10, 9, 8)) {
+            $pyExe = & py -3.$minor -c "import sys; print(sys.executable)" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $pyExe -and (Test-PythonBinary $pyExe)) {
+                $PYTHON = $pyExe
+                Write-Detail "Found Python via py launcher: $PYTHON"
                 break
+            }
+        }
+        # Fallback: py -3 (default 3.x)
+        if (-not $PYTHON) {
+            $pyExe = & py -3 -c "import sys; print(sys.executable)" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $pyExe -and (Test-PythonBinary $pyExe)) {
+                $PYTHON = $pyExe
+                Write-Detail "Found Python via py launcher (default): $PYTHON"
             }
         }
     } catch { }
 }
 
+# Pass 3: scan common install directories
+if (-not $PYTHON) {
+    $searchRoots = @(
+        "$env:LOCALAPPDATA\Programs\Python",
+        "C:\Program Files\Python*",
+        "C:\Python*",
+        "$env:APPDATA\Python\Python*"
+    )
+    $found = $null
+    foreach ($root in $searchRoots) {
+        $dirs = @(Get-Item $root -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+        foreach ($d in $dirs) {
+            $exe = Join-Path $d.FullName "python.exe"
+            if (Test-Path $exe -and (Test-PythonBinary $exe)) {
+                $found = $exe
+                break
+            }
+        }
+        if ($found) { break }
+    }
+    if ($found) {
+        $PYTHON = $found
+        Write-Detail "Found Python in install directory: $PYTHON"
+    }
+}
+
+# Auto-install Python if still not found and user consented
 if (-not $PYTHON) {
     if ($Accept) {
-        Write-Host "Python 3.8+ not found. -Accept: attempting auto-install..." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Python 3.8+ not found in PATH, py launcher, or common install locations." -ForegroundColor Yellow
+        Write-Host "Attempting automatic installation (best-effort)..." -ForegroundColor Yellow
+        Write-Host ""
         $installed = $false
+
+        # winget (Windows 10+)
         try {
             if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Detail "Detected winget — installing Python 3..."
-                winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-                $installed = $true
+                Write-Detail "winget found -- installing Python 3.12..."
+                winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | ForEach-Object { Write-Detail "  winget: $_" }
+                if ($LASTEXITCODE -eq 0) { $installed = $true }
             }
         } catch { }
+
+        # Chocolatey
         if (-not $installed) {
             try {
                 if (Get-Command choco -ErrorAction SilentlyContinue) {
-                    Write-Detail "Detected Chocolatey — installing Python 3..."
-                    choco install python -y 2>&1 | Out-Null
-                    $installed = $true
+                    Write-Detail "Chocolatey found -- installing Python 3..."
+                    choco install python312 -y 2>&1 | ForEach-Object { Write-Detail "  choco: $_" }
+                    if ($LASTEXITCODE -eq 0) { $installed = $true }
                 }
             } catch { }
         }
+
+        # Scoop
         if (-not $installed) {
-            Write-Detail "No package manager found (winget/choco). Install Python manually from https://python.org"
-            Write-Detail "Then re-run this installer."
-        }
-        # Re-detect
-        foreach ($candidate in @("python3", "python")) {
             try {
-                $ver = & $candidate --version 2>&1
-                if ($ver -match "Python 3\.(\d+)") {
-                    $minor = [int]$Matches[1]
-                    if ($minor -ge 8) {
-                        $PYTHON = $candidate
-                        break
+                if (Get-Command scoop -ErrorAction SilentlyContinue) {
+                    Write-Detail "Scoop found -- installing Python..."
+                    scoop install python 2>&1 | ForEach-Object { Write-Detail "  scoop: $_" }
+                    if ($LASTEXITCODE -eq 0) { $installed = $true }
+                }
+            } catch { }
+        }
+
+        # Re-scan after attempted install (refresh PATH; also try common install dirs again)
+        if ($installed) {
+            Write-Detail "Installation reported success. Re-scanning for Python..."
+            foreach ($c in $pathCandidates) {
+                if (Test-PythonBinary $c) { $PYTHON = $c; break }
+            }
+            if (-not $PYTHON) {
+                # winget installs to %LOCALAPPDATA%\Programs\Python\Python312\python.exe
+                foreach ($minor in @(13, 12, 11, 10, 9, 8)) {
+                    $wingetPath = "$env:LOCALAPPDATA\Programs\Python\Python3$minor\python.exe"
+                    if ((Test-Path $wingetPath) -and (Test-PythonBinary $wingetPath)) {
+                        $PYTHON = $wingetPath; break
                     }
                 }
-            } catch { }
+            }
+            if (-not $PYTHON) {
+                foreach ($minor in @(13, 12, 11, 10, 9, 8)) {
+                    $chocoPath = "C:\Program Files\Python3$minor\python.exe"
+                    if ((Test-Path $chocoPath) -and (Test-PythonBinary $chocoPath)) {
+                        $PYTHON = $chocoPath; break
+                    }
+                }
+            }
         }
     }
+
     if (-not $PYTHON) {
-        Write-Err "Python 3.8+ required but not found. Install from https://python.org and ensure it is on your PATH."
-        Write-Err "Or re-run with -Accept to attempt automatic installation."
+        Write-Host ""
+        Write-Err "Python 3.8+ could not be located or installed automatically."
+        Write-Err ""
+        Write-Err "Install Python manually from: https://www.python.org/downloads/"
+        Write-Err "Ensure 'Add Python to PATH' is checked during installation."
+        Write-Err "Then re-run this installer."
+        Write-Err ""
+        Write-Err "Or re-run with -Accept to attempt automatic installation via winget/choco/scoop."
         exit 1
     }
 }
 
 $pyVer = & $PYTHON --version 2>&1
+Write-Detail "Resolved Python: $PYTHON ($pyVer)"
 
 # Resolve Python to use for installation
 $INSTALL_PYTHON = $PYTHON
@@ -186,7 +279,7 @@ if (-not $NoVenv) {
                 throw "venv creation failed"
             }
         } catch {
-            Write-Warn "venv creation failed — falling back to system Python."
+            Write-Warn "venv creation failed -- falling back to system Python."
             Write-Warn "You may need to install the Python venv module."
             $NoVenv = $true
         }
@@ -200,7 +293,7 @@ if (-not $NoVenv) {
             $INSTALL_PYTHON = $venvPythonPath
             Write-Detail "Venv ready: $INSTALL_PYTHON"
         } else {
-            Write-Warn "venv python not found — falling back to system Python."
+            Write-Warn "venv python not found -- falling back to system Python."
             $NoVenv = $true
         }
     }
@@ -212,7 +305,7 @@ if ($NoVenv) {
 
 Write-Host ""
 Write-Header
-Write-Host "  LessToil Plugin v0.4.0 — Installer" -ForegroundColor Cyan
+Write-Host "  LessToil Plugin v0.4.0 -- Installer" -ForegroundColor Cyan
 Write-Header
 Write-Host "  Python:   $INSTALL_PYTHON ($(& $INSTALL_PYTHON --version 2>&1))"
 if ($VENV_DIR) {
@@ -225,7 +318,7 @@ Write-Header
 Write-Host ""
 
 # ==============================================================================
-# STEP 0: Resolve plugin source (zip → local → GitHub)
+# STEP 0: Resolve plugin source (zip -> local -> GitHub)
 # ==============================================================================
 $ZIP_SOURCE = ""
 $ZIP_TEMP = ""
@@ -367,7 +460,6 @@ Copy-PluginDir "agents"             "agents"            "agents"
 Copy-PluginDir "skills"             "skills"            "skills"
 Copy-PluginDir "scripts"            "scripts"           "scripts"
 Copy-PluginDir "plugin metadata"    ".claude-plugin"    ".claude-plugin"
-Copy-PluginDir "install scripts"    $null               "."
 
 Write-Host ""
 
@@ -378,7 +470,8 @@ if (Test-Path $hooksJsonPath) {
     $pythonAbs = (Get-Command $INSTALL_PYTHON -ErrorAction SilentlyContinue).Source
     if (-not $pythonAbs) { $pythonAbs = $INSTALL_PYTHON }
     $hooksContent = Get-Content $hooksJsonPath -Raw -Encoding UTF8
-    $hooksContent = $hooksContent -replace '"python "', '"' + $pythonAbs + ' "'
+    $replacement = '"' + $pythonAbs + ' "'
+    $hooksContent = $hooksContent -replace '"python "', $replacement
     Set-Content -Path $hooksJsonPath -Value $hooksContent -Encoding UTF8 -NoNewline
     Write-Detail "hooks.json: using $pythonAbs"
 }
