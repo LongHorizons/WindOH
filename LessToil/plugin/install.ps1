@@ -59,8 +59,8 @@ param(
     [string]$FromZip = "",
     [switch]$Accept,
     [switch]$NoVenv,
-    [string]$Branch = "main",
-    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH/LessToil",
+    [string]$Branch = "master",
+    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH",
     [switch]$Help
 )
 
@@ -285,7 +285,7 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
 
     if ($GIT) {
         Write-Detail "Cloning plugin from $RepoUrl (branch: $Branch)..."
-        Write-Detail "Using sparse checkout for plugins/repo-cognition/"
+        Write-Detail "Using sparse checkout for LessToil/plugin/"
 
         # Clean up any previous temp clone
         if (Test-Path $TEMP_CLONE) { Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue }
@@ -303,11 +303,11 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
             }
         } else {
             Push-Location $TEMP_CLONE
-            git sparse-checkout set "plugins/repo-cognition" 2>&1 | Out-Null
+            git sparse-checkout set "LessToil/plugin" 2>&1 | Out-Null
             Pop-Location
         }
 
-        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "plugins\repo-cognition"
+        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "LessToil\plugin"
     } else {
         Write-Err "git not found on PATH. The installer requires git to fetch the plugin from GitHub."
         Write-Err ""

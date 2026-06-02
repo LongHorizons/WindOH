@@ -5,8 +5,8 @@
   "author": {
     "name": "LessToil Team"
   },
-  "homepage": "https://github.com/LongHorizons/WindOH/LessToil/tree/main/plugins/repo-cognition",
-  "repository": "https://github.com/LongHorizons/WindOH/LessToil",
+  "homepage": "https://github.com/LongHorizons/WindOH/tree/master/LessToil/plugin",
+  "repository": "https://github.com/LongHorizons/WindOH",
   "keywords": [
     "indexing",
     "analysis",

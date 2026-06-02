@@ -249,17 +249,17 @@ if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     echo "      Fetching plugin from GitHub (sparse checkout)..."
 
     if git clone --depth 1 --filter=blob:none --sparse \
-        https://github.com/LongHorizons/WindOH/LessToil.git "$GIT_TEMP_DIR" 2>/dev/null; then
-        (cd "$GIT_TEMP_DIR" && git sparse-checkout set "plugins/repo-cognition" 2>/dev/null)
-        SCRIPT_DIR="${GIT_TEMP_DIR}/plugins/repo-cognition"
+        https://github.com/LongHorizons/WindOH.git "$GIT_TEMP_DIR" 2>/dev/null; then
+        (cd "$GIT_TEMP_DIR" && git sparse-checkout set "LessToil/plugin" 2>/dev/null)
+        SCRIPT_DIR="${GIT_TEMP_DIR}/LessToil/plugin"
     else
         # Fallback: full shallow clone for older git versions
         echo "      Sparse checkout not supported, trying full shallow clone..."
         rm -rf "$GIT_TEMP_DIR"
         GIT_TEMP_DIR="$(mktemp -d)"
         if git clone --depth 1 \
-            https://github.com/LongHorizons/WindOH/LessToil.git "$GIT_TEMP_DIR" 2>/dev/null; then
-            SCRIPT_DIR="${GIT_TEMP_DIR}/plugins/repo-cognition"
+            https://github.com/LongHorizons/WindOH.git "$GIT_TEMP_DIR" 2>/dev/null; then
+            SCRIPT_DIR="${GIT_TEMP_DIR}/LessToil/plugin"
         else
             echo "ERROR: Failed to clone repository. Check your internet connection and GitHub access."
             rm -rf "$GIT_TEMP_DIR"
