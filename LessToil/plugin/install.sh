@@ -11,7 +11,7 @@
 #   bash install.sh --no-venv                # Skip venv creation, use system Python directly
 #
 # One-liner (from GitHub):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
 #
 # Installs plugin to ~/.claude/plugins/repo-cognition/ and sets up the target project.
 # Source priority: --from-zip FILE → local clone (if running from plugin dir) → GitHub clone
@@ -77,29 +77,6 @@ if [ "$PLUGIN_ONLY" = false ] && [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-# --- Consent prompt -----------------------------------------------------------
-if [ "$ACCEPT" = false ]; then
-    echo ""
-    echo "=============================================="
-    echo "  LessToil Plugin v0.4.0 — Installer"
-    echo "=============================================="
-    echo ""
-    echo "  This will:"
-    echo "    * Install the repo-cognition plugin to ~/.claude/plugins/"
-    echo "    * Install Python dependencies (tree-sitter, 34 grammar packages)"
-    if [ "$PLUGIN_ONLY" = false ]; then
-        echo "    * Set up $PROJECT_DIR with a CLAUDE.md template"
-    fi
-    echo ""
-    printf "  Continue? [Y/n] "
-    read -r consent
-    if [ -n "$consent" ] && [ "$consent" != "Y" ] && [ "$consent" != "y" ]; then
-        echo "  Aborted."
-        exit 0
-    fi
-    echo ""
-fi
-
 # --- Detect Python ----------------------------------------------------------
 PYTHON=""
 for candidate in python3 python; do
@@ -110,80 +87,39 @@ for candidate in python3 python; do
     fi
 done
 
-# Scan common install directories (Windows Git Bash / WSL)
-if [ -z "$PYTHON" ]; then
-    for pydir in \
-        "$PROGRAMFILES/Python312" "$PROGRAMFILES/Python311" "$PROGRAMFILES/Python310" \
-        "$PROGRAMFILES/Python39" "$PROGRAMFILES/Python38" \
-        "$LOCALAPPDATA/Programs/Python/Python312" "$LOCALAPPDATA/Programs/Python/Python311" \
-        "$LOCALAPPDATA/Programs/Python/Python310" "$LOCALAPPDATA/Programs/Python/Python39" \
-        "$LOCALAPPDATA/Programs/Python/Python38" \
-        "/mnt/c/Program Files/Python312" "/mnt/c/Program Files/Python311" \
-        "/mnt/c/Program Files/Python310" "/mnt/c/Program Files/Python39" \
-        "/mnt/c/Program Files/Python38" \
-        "/c/Program Files/Python312" "/c/Program Files/Python311" \
-        "/c/Program Files/Python310" "/c/Program Files/Python39" \
-        "/c/Program Files/Python38"; do
-        if [ -x "$pydir/python.exe" ]; then
-            PYTHON="$pydir/python.exe"
-            break
-        elif [ -x "$pydir/python3" ]; then
-            PYTHON="$pydir/python3"
-            break
+# Auto-install Python if missing and --accept was given
+if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
+    echo "Python 3.8+ not found. --accept: attempting auto-install..."
+    if command -v apt-get &>/dev/null; then
+        echo "      Detected apt-get — installing python3..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
+    elif command -v brew &>/dev/null; then
+        echo "      Detected Homebrew — installing python3..."
+        brew install python3 2>&1 || true
+    elif command -v dnf &>/dev/null; then
+        echo "      Detected dnf — installing python3..."
+        sudo dnf install -y python3 python3-pip 2>&1 || true
+    elif command -v pacman &>/dev/null; then
+        echo "      Detected pacman — installing python3..."
+        sudo pacman -S --noconfirm python python-pip 2>&1 || true
+    elif command -v apk &>/dev/null; then
+        echo "      Detected apk — installing python3..."
+        sudo apk add python3 py3-pip 2>&1 || true
+    fi
+    # Re-detect
+    for candidate in python3 python; do
+        if command -v "$candidate" &>/dev/null; then
+            case "$("$candidate" --version 2>&1)" in
+                "Python 3."*) PYTHON="$candidate"; break ;;
+            esac
         fi
     done
 fi
 
 if [ -z "$PYTHON" ]; then
-    echo "ERROR: Python 3.8+ required but not found."
-    echo ""
-    if [ "$ACCEPT" = false ]; then
-        printf "      Attempt automatic installation? [Y/n] "
-        read -r install_python
-        if [ -z "$install_python" ] || [ "$install_python" = "Y" ] || [ "$install_python" = "y" ]; then
-            ACCEPT=true
-        else
-            echo "ERROR: Install from https://python.org and ensure it is on your PATH, then re-run."
-            exit 1
-        fi
-    fi
-    if [ "$ACCEPT" = true ]; then
-        echo "      Attempting auto-install..."
-        if command -v apt-get &>/dev/null; then
-            echo "      Detected apt-get — installing python3..."
-            sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 || true
-        elif command -v brew &>/dev/null; then
-            echo "      Detected Homebrew — installing python3..."
-            brew install python3 2>&1 || true
-        elif command -v dnf &>/dev/null; then
-            echo "      Detected dnf — installing python3..."
-            sudo dnf install -y python3 python3-pip 2>&1 || true
-        elif command -v pacman &>/dev/null; then
-            echo "      Detected pacman — installing python3..."
-            sudo pacman -S --noconfirm python python-pip 2>&1 || true
-        elif command -v apk &>/dev/null; then
-            echo "      Detected apk — installing python3..."
-            sudo apk add python3 py3-pip 2>&1 || true
-        elif command -v winget &>/dev/null; then
-            echo "      Detected winget — installing Python 3..."
-            winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 || true
-        else
-            echo "      No package manager found. Install Python manually from https://python.org"
-        fi
-        # Re-detect
-        for candidate in python3 python; do
-            if command -v "$candidate" &>/dev/null; then
-                case "$("$candidate" --version 2>&1)" in
-                    "Python 3."*) PYTHON="$candidate"; break ;;
-                esac
-            fi
-        done
-    fi
-    if [ -z "$PYTHON" ]; then
-        echo "ERROR: Python 3.8+ still not found. Install manually from https://python.org"
-        echo "       and ensure it is on your PATH, then re-run."
-        exit 1
-    fi
+    echo "ERROR: Python 3.8+ required but not found. Install from https://python.org"
+    echo "       Or re-run with --accept to attempt automatic installation."
+    exit 1
 fi
 
 PY_MAJOR=$("$PYTHON" -c "import sys; print(sys.version_info[0])" 2>/dev/null || echo 0)
@@ -313,40 +249,23 @@ if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then
     echo "      Fetching plugin from GitHub (sparse checkout)..."
 
     if git clone --depth 1 --filter=blob:none --sparse \
-        https://github.com/LongHorizons/WindOH.git "$GIT_TEMP_DIR" 2>/dev/null; then
-        (cd "$GIT_TEMP_DIR" && git sparse-checkout set "LessToil/plugin" 2>/dev/null)
-        SCRIPT_DIR="${GIT_TEMP_DIR}/LessToil/plugin"
+        https://github.com/LongHorizons/WindOH/LessToil.git "$GIT_TEMP_DIR" 2>/dev/null; then
+        (cd "$GIT_TEMP_DIR" && git sparse-checkout set "plugins/repo-cognition" 2>/dev/null)
+        SCRIPT_DIR="${GIT_TEMP_DIR}/plugins/repo-cognition"
     else
         # Fallback: full shallow clone for older git versions
         echo "      Sparse checkout not supported, trying full shallow clone..."
         rm -rf "$GIT_TEMP_DIR"
         GIT_TEMP_DIR="$(mktemp -d)"
         if git clone --depth 1 \
-            https://github.com/LongHorizons/WindOH.git "$GIT_TEMP_DIR" 2>/dev/null; then
-            SCRIPT_DIR="${GIT_TEMP_DIR}/LessToil/plugin"
+            https://github.com/LongHorizons/WindOH/LessToil.git "$GIT_TEMP_DIR" 2>/dev/null; then
+            SCRIPT_DIR="${GIT_TEMP_DIR}/plugins/repo-cognition"
         else
             echo "ERROR: Failed to clone repository. Check your internet connection and GitHub access."
             rm -rf "$GIT_TEMP_DIR"
             exit 1
         fi
     fi
-fi
-
-# If cloned dir has zip but not extracted source, extract the zip
-if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ] && [ -f "${SCRIPT_DIR}/repo-cognition.zip" ]; then
-    ZIP_SOURCE="${SCRIPT_DIR}/repo-cognition.zip"
-    ZIP_TEMP="$(mktemp -d)"
-    echo "      Extracting plugin from cloned zip..."
-    if command -v unzip &>/dev/null; then
-        unzip -q "$ZIP_SOURCE" -d "$ZIP_TEMP"
-    elif "$INSTALL_PYTHON" -c "import zipfile" 2>/dev/null; then
-        "$INSTALL_PYTHON" -c "
-import zipfile
-zf = zipfile.ZipFile('$ZIP_SOURCE')
-zf.extractall('$ZIP_TEMP')
-"
-    fi
-    SCRIPT_DIR="$ZIP_TEMP"
 fi
 
 if [ ! -f "${SCRIPT_DIR}/core/manifest.py" ]; then

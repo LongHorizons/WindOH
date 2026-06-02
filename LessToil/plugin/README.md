@@ -117,12 +117,12 @@ All answers are prefixed with `[index]` (queried the database) or `[grep]` (fell
 
 ### Windows (PowerShell)
 ```powershell
-iex ((iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content)
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
 ```
 
 ### macOS / Linux (Bash)
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
 ```
 
 ### Offline (from release zip)
@@ -184,4 +184,4 @@ Everything runs locally. SQLite database and all index files stored in `.claude/
 
 ## License
 
-[LongHorizons Software License v1.0](../../LICENSE) — free for personal, research, and educational use. Commercial use requires a separate license.
+MIT

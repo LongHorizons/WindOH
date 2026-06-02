@@ -300,13 +300,13 @@ Approximately 10-20% of source code size. A 10 MB codebase produces a 1-2 MB SQL
 ### Windows (PowerShell)
 
 ```powershell
-iex ((iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content)
+irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
 ```
 
 ### macOS / Linux (Bash)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.sh)
 ```
 
 ### Post-Install
@@ -372,4 +372,4 @@ All indexing happens **locally** on your machine. The SQLite database, JSON mani
 
 ## License
 
-[LongHorizons Software License v1.0](../LICENSE) — free for personal, research, and educational use. Commercial use requires a separate license.
+MIT

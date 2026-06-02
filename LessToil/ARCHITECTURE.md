@@ -120,7 +120,7 @@ Agent makes edits → PostToolUse hook fires
 ### Source Tree
 
 ```
-LessToil/plugin/
+plugins/repo-cognition/
 │
 ├── hooks/                          # Runtime lifecycle hooks
 │   ├── hooks.json                  # Hook registration
@@ -1286,7 +1286,7 @@ The index is regenerated from source code on session start. Committing it to ver
 **Alternatives**: Additional SQLite tables (harder for agents to write), JSON (less human-readable, harder for agents to author correctly).
 
 ### ADR-006: Sparse Checkout for Installation
-**Decision**: Both installers use `git sparse-checkout` with `--filter=blob:none` to fetch only `LessToil/plugin/` from the monorepo.
+**Decision**: Both installers use `git sparse-checkout` with `--filter=blob:none` to fetch only `plugins/repo-cognition/` from the monorepo.
 **Rationale**: The monorepo is large; sparse checkout makes installation fast (< 10 seconds). The `--filter=blob:none` flag avoids downloading any file contents until checkout.
 **Alternatives**: Download individual raw files (fragile, 48+ files to track), git submodule (adds complexity), separate repo (plugin co-developed with monorepo).
 

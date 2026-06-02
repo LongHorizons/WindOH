@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    LessToil Plugin -- PowerShell Installer for Windows
+    LessToil Plugin — PowerShell Installer for Windows
 .DESCRIPTION
     Installs the repo-cognition plugin to ~/.claude/plugins/repo-cognition/
     by fetching the plugin from GitHub and setting up the target project.
@@ -29,7 +29,7 @@
     Git branch to fetch from GitHub. Defaults to "main".
 
 .PARAMETER RepoUrl
-    GitHub repository URL. Defaults to "https://github.com/LongHorizons/WindOH".
+    GitHub repository URL. Defaults to "https://github.com/LongHorizons/WindOH/LessToil".
 
 .PARAMETER Help
     Show this help message.
@@ -47,7 +47,7 @@
     Installs from a local release zip without any prompts.
 
 .EXAMPLE
-    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1").Content
+    Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1").Content
     One-liner from GitHub (run from your project directory).
 #>
 
@@ -59,8 +59,8 @@ param(
     [string]$FromZip = "",
     [switch]$Accept,
     [switch]$NoVenv,
-    [string]$Branch = "master",
-    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH",
+    [string]$Branch = "main",
+    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH/LessToil",
     [switch]$Help
 )
 
@@ -69,7 +69,7 @@ $ErrorActionPreference = "Stop"
 # --- Constants -----------------------------------------------------------------
 $PLUGIN_NAME = "repo-cognition"
 $PLUGIN_DIR = Join-Path $HOME ".claude\plugins\$PLUGIN_NAME"
-$SCRIPT_DIR = if ($MyInvocation.MyCommand.Path) { Split-Path $MyInvocation.MyCommand.Path -Parent } else { (Get-Location).Path }
+$SCRIPT_DIR = Split-Path $MyInvocation.MyCommand.Path -Parent
 $TEMP_CLONE = Join-Path ([System.IO.Path]::GetTempPath()) "claude-code-plugin-$PID"
 
 # --- ANSI helpers (Windows 10+ console) ----------------------------------------
@@ -92,14 +92,14 @@ Options:
   -FromZip FILE       Install from a local release zip instead of GitHub
   -Accept             Non-interactive mode: auto-confirm all prompts
   -NoVenv             Skip creating ~/.claude/venv/, use system Python directly
-  -Branch NAME        Git branch to fetch from GitHub (default: master)
+  -Branch NAME        Git branch to fetch from GitHub (default: main)
   -RepoUrl URL        GitHub repository URL
   -Help               Show this help
 
 Source priority: -FromZip > local clone > GitHub
 
 One-liner from GitHub:
-  iex ((iwr -UseBasicParsing https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.ps1).Content)
+  irm https://raw.githubusercontent.com/LongHorizons/WindOH/LessToil/main/plugins/repo-cognition/install.ps1 | iex
 "@ | Write-Host
     exit 0
 }
@@ -110,122 +110,62 @@ if (-not $PluginOnly -and -not (Test-Path $ProjectDir)) {
     exit 1
 }
 
-# --- Consent prompt -----------------------------------------------------------
-if (-not $Accept) {
-    Write-Host ""
-    Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host "  LessToil Plugin v0.4.0 -- Installer" -ForegroundColor Cyan
-    Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  This will:" -ForegroundColor White
-    Write-Host "    * Install the repo-cognition plugin to ~/.claude/plugins/"
-    Write-Host "    * Install Python dependencies (tree-sitter, 34 grammar packages)"
-    if (-not $PluginOnly) {
-        Write-Host "    * Set up $ProjectDir with a CLAUDE.md template"
-    }
-    Write-Host ""
-    $consent = Read-Host "  Continue? [Y/n]"
-    if ($consent -ne '' -and $consent -notmatch '^[Yy]') {
-        Write-Host "  Aborted." -ForegroundColor Yellow
-        exit 0
-    }
-    Write-Host ""
+# --- Detect Python -------------------------------------------------------------
+$PYTHON = $null
+foreach ($candidate in @("python3", "python")) {
+    try {
+        $ver = & $candidate --version 2>&1
+        if ($ver -match "Python 3\.(\d+)") {
+            $minor = [int]$Matches[1]
+            if ($minor -ge 8) {
+                $PYTHON = $candidate
+                break
+            }
+        }
+    } catch { }
 }
 
-# --- Detect Python -------------------------------------------------------------
-function Detect-Python {
-    # First try PATH
-    foreach ($candidate in @("python3", "python")) {
+if (-not $PYTHON) {
+    if ($Accept) {
+        Write-Host "Python 3.8+ not found. -Accept: attempting auto-install..." -ForegroundColor Yellow
+        $installed = $false
         try {
-            $ver = & $candidate --version 2>&1
-            if ($ver -match "Python 3\.(\d+)") {
-                $minor = [int]$Matches[1]
-                if ($minor -ge 8) { return $candidate }
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Detail "Detected winget — installing Python 3..."
+                winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+                $installed = $true
             }
         } catch { }
-    }
-    # Scan common install directories
-    $pyDirs = @(
-        "$env:ProgramFiles\Python312",
-        "$env:ProgramFiles\Python311",
-        "$env:ProgramFiles\Python310",
-        "$env:ProgramFiles\Python39",
-        "$env:ProgramFiles\Python38",
-        "$env:LOCALAPPDATA\Programs\Python\Python312",
-        "$env:LOCALAPPDATA\Programs\Python\Python311",
-        "$env:LOCALAPPDATA\Programs\Python\Python310",
-        "$env:LOCALAPPDATA\Programs\Python\Python39",
-        "$env:LOCALAPPDATA\Programs\Python\Python38",
-        "C:\Python312", "C:\Python311", "C:\Python310", "C:\Python39", "C:\Python38"
-    )
-    foreach ($dir in $pyDirs) {
-        $pyExe = Join-Path $dir "python.exe"
-        if (Test-Path $pyExe) {
+        if (-not $installed) {
             try {
-                $ver = & $pyExe --version 2>&1
+                if (Get-Command choco -ErrorAction SilentlyContinue) {
+                    Write-Detail "Detected Chocolatey — installing Python 3..."
+                    choco install python -y 2>&1 | Out-Null
+                    $installed = $true
+                }
+            } catch { }
+        }
+        if (-not $installed) {
+            Write-Detail "No package manager found (winget/choco). Install Python manually from https://python.org"
+            Write-Detail "Then re-run this installer."
+        }
+        # Re-detect
+        foreach ($candidate in @("python3", "python")) {
+            try {
+                $ver = & $candidate --version 2>&1
                 if ($ver -match "Python 3\.(\d+)") {
                     $minor = [int]$Matches[1]
                     if ($minor -ge 8) {
-                        # Add to PATH so venv/pip work correctly
-                        $env:Path = "$dir;$dir\Scripts;" + $env:Path
-                        return $pyExe
+                        $PYTHON = $candidate
+                        break
                     }
                 }
             } catch { }
         }
     }
-    return $null
-}
-
-function Install-PythonAuto {
-    Write-Host "      Attempting auto-install..." -ForegroundColor Yellow
-    $installed = $false
-    try {
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Detail "Detected winget -- installing Python 3..."
-            winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-            $installed = $true
-        }
-    } catch { }
-    if (-not $installed) {
-        try {
-            if (Get-Command choco -ErrorAction SilentlyContinue) {
-                Write-Detail "Detected Chocolatey -- installing Python 3..."
-                choco install python -y 2>&1 | Out-Null
-                $installed = $true
-            }
-        } catch { }
-    }
-    if (-not $installed) {
-        Write-Detail "No package manager found (winget/choco). Install Python manually from https://python.org"
-        Write-Detail "Then re-run this installer."
-    }
-    return $installed
-}
-
-$PYTHON = Detect-Python
-
-if (-not $PYTHON) {
-    Write-Err "Python 3.8+ required but not found."
-    Write-Host ""
-
-    if (-not $Accept) {
-        $installPython = Read-Host "      Attempt automatic installation? [Y/n]"
-        if ($installPython -eq '' -or $installPython -match '^[Yy]') {
-            $null = Install-PythonAuto
-            $PYTHON = Detect-Python
-        } else {
-            Write-Err "Install from https://python.org and ensure it is on your PATH, then re-run."
-            exit 1
-        }
-    } else {
-        $null = Install-PythonAuto
-        $PYTHON = Detect-Python
-    }
-
     if (-not $PYTHON) {
-        Write-Err "Python 3.8+ still not found. Install manually from https://python.org"
-        Write-Err "and ensure it is on your PATH, then re-run."
+        Write-Err "Python 3.8+ required but not found. Install from https://python.org and ensure it is on your PATH."
+        Write-Err "Or re-run with -Accept to attempt automatic installation."
         exit 1
     }
 }
@@ -246,7 +186,7 @@ if (-not $NoVenv) {
                 throw "venv creation failed"
             }
         } catch {
-            Write-Warn "venv creation failed -- falling back to system Python."
+            Write-Warn "venv creation failed — falling back to system Python."
             Write-Warn "You may need to install the Python venv module."
             $NoVenv = $true
         }
@@ -260,7 +200,7 @@ if (-not $NoVenv) {
             $INSTALL_PYTHON = $venvPythonPath
             Write-Detail "Venv ready: $INSTALL_PYTHON"
         } else {
-            Write-Warn "venv python not found -- falling back to system Python."
+            Write-Warn "venv python not found — falling back to system Python."
             $NoVenv = $true
         }
     }
@@ -272,7 +212,7 @@ if ($NoVenv) {
 
 Write-Host ""
 Write-Header
-Write-Host "  LessToil Plugin v0.4.0 -- Installer" -ForegroundColor Cyan
+Write-Host "  LessToil Plugin v0.4.0 — Installer" -ForegroundColor Cyan
 Write-Header
 Write-Host "  Python:   $INSTALL_PYTHON ($(& $INSTALL_PYTHON --version 2>&1))"
 if ($VENV_DIR) {
@@ -345,51 +285,29 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
 
     if ($GIT) {
         Write-Detail "Cloning plugin from $RepoUrl (branch: $Branch)..."
-        Write-Detail "Using sparse checkout for LessToil/plugin/"
+        Write-Detail "Using sparse checkout for plugins/repo-cognition/"
 
         # Clean up any previous temp clone
         if (Test-Path $TEMP_CLONE) { Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue }
 
         # Sparse checkout: only fetch the plugin directory
-        $prevEAP = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
         git clone --depth 1 --filter=blob:none --sparse "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
-        $cloneOk = ($LASTEXITCODE -eq 0)
-        $ErrorActionPreference = $prevEAP
-        if (-not $cloneOk) {
+        if ($LASTEXITCODE -ne 0) {
             # Fallback: full shallow clone (older git)
             Write-Detail "Sparse checkout failed, trying full shallow clone..."
             Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue
-            $ErrorActionPreference = "Continue"
             git clone --depth 1 "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
-            $cloneOk = ($LASTEXITCODE -eq 0)
-            $ErrorActionPreference = $prevEAP
-            if (-not $cloneOk) {
+            if ($LASTEXITCODE -ne 0) {
                 Write-Err "Failed to clone repository. Check your internet connection and GitHub access."
                 exit 1
             }
         } else {
             Push-Location $TEMP_CLONE
-            $ErrorActionPreference = "Continue"
-            git sparse-checkout set "LessToil/plugin" 2>&1 | Out-Null
-            $ErrorActionPreference = $prevEAP
+            git sparse-checkout set "plugins/repo-cognition" 2>&1 | Out-Null
             Pop-Location
         }
 
-        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "LessToil\plugin"
-
-        # If cloned dir has zip but not extracted source, extract the zip
-        if (-not (Test-Path (Join-Path $LOCAL_PLUGIN_SRC "core\manifest.py"))) {
-            $clonedZip = Join-Path $LOCAL_PLUGIN_SRC "repo-cognition.zip"
-            if (Test-Path $clonedZip) {
-                $ZIP_TEMP = Join-Path ([System.IO.Path]::GetTempPath()) "repo-cognition-$PID"
-                if (Test-Path $ZIP_TEMP) { Remove-Item -Recurse -Force $ZIP_TEMP -ErrorAction SilentlyContinue }
-                Write-Detail "Extracting plugin from cloned zip..."
-                Add-Type -AssemblyName System.IO.Compression.FileSystem
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($clonedZip, $ZIP_TEMP)
-                $LOCAL_PLUGIN_SRC = $ZIP_TEMP
-            }
-        }
+        $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "plugins\repo-cognition"
     } else {
         Write-Err "git not found on PATH. The installer requires git to fetch the plugin from GitHub."
         Write-Err ""
@@ -445,8 +363,7 @@ if (Test-Path $hooksJsonPath) {
     $pythonAbs = (Get-Command $INSTALL_PYTHON -ErrorAction SilentlyContinue).Source
     if (-not $pythonAbs) { $pythonAbs = $INSTALL_PYTHON }
     $hooksContent = Get-Content $hooksJsonPath -Raw -Encoding UTF8
-    $hookReplacement = '"' + $pythonAbs + ' "'
-    $hooksContent = $hooksContent -replace '"python "', $hookReplacement
+    $hooksContent = $hooksContent -replace '"python "', '"' + $pythonAbs + ' "'
     Set-Content -Path $hooksJsonPath -Value $hooksContent -Encoding UTF8 -NoNewline
     Write-Detail "hooks.json: using $pythonAbs"
 }
@@ -648,8 +565,7 @@ if (-not $PluginOnly) {
             $members = [regex]::Matches($cargoContent, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
             if ($members) { $WORKSPACE_INFO = "Workspace crates: $($members -join ' ')" }
         }
-    } elseif ((Get-ChildItem $ProjectDir -Filter *.ts -ErrorAction SilentlyContinue | Select-Object -First 1) -or
-               (Get-ChildItem $ProjectDir -Filter *.tsx -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+    } elseif (Get-ChildItem $ProjectDir -Filter *.ts,*.tsx -ErrorAction SilentlyContinue | Select-Object -First 1) {
         $LANG_HINT = "TypeScript"
     } elseif (Get-ChildItem $ProjectDir -Filter *.py -ErrorAction SilentlyContinue | Select-Object -First 1) {
         $LANG_HINT = "Python"
