@@ -13,7 +13,7 @@
 # One-liner (from GitHub):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/LongHorizons/WindOH/master/LessToil/plugin/install.sh)
 #
-# Installs plugin to ~/.claude/plugins/repo-cognition/ and sets up the target project.
+# Installs plugin to ~/.claude/plugins/less-toil/ and sets up the target project.
 # Source priority: --from-zip FILE -> local clone (if running from plugin dir) -> GitHub clone
 
 # Require bash -- pipefail, [[, and local are bashisms not available in sh/dash
@@ -24,7 +24,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 set -euo pipefail
 
-PLUGIN_NAME="repo-cognition"
+PLUGIN_NAME="less-toil"
 PLUGIN_DIR="${HOME}/.claude/plugins/${PLUGIN_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -690,12 +690,12 @@ ${LANG_HINT:+${LANG_HINT} project.}${WORKSPACE_INFO:+ ${WORKSPACE_INFO}}
 
 \`\`\`bash
 # Primary: Query helper script (predefined queries)
-python ~/.claude/plugins/repo-cognition/scripts/query-index.py --symbol X
-python ~/.claude/plugins/repo-cognition/scripts/query-index.py --callers X
-python ~/.claude/plugins/repo-cognition/scripts/query-index.py --hotspots
+python ~/.claude/plugins/less-toil/scripts/query-index.py --symbol X
+python ~/.claude/plugins/less-toil/scripts/query-index.py --callers X
+python ~/.claude/plugins/less-toil/scripts/query-index.py --hotspots
 
 # Primary: Query helper script (any SQL)
-python ~/.claude/plugins/repo-cognition/scripts/query-index.py "SELECT * FROM files LIMIT 5"
+python ~/.claude/plugins/less-toil/scripts/query-index.py "SELECT * FROM files LIMIT 5"
 
 # Inline Python (always available, no script needed)
 python -c "
@@ -724,16 +724,16 @@ This applies to ALL agents and sub-agents. If the user sees \`[grep]\` repeatedl
 
 | You are asked | Use |
 |--------------|-----|
-| "Where is X defined?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --symbol X\` |
-| "Who calls X?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --callers X\` |
-| "What does X call?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py "SELECT ce.callee_name, ce.callee_file FROM call_edges ce JOIN symbols s ON ce.caller_id = s.id WHERE s.name = 'X'"\` |
+| "Where is X defined?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --symbol X\` |
+| "Who calls X?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --callers X\` |
+| "What does X call?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py "SELECT ce.callee_name, ce.callee_file FROM call_edges ce JOIN symbols s ON ce.caller_id = s.id WHERE s.name = 'X'"\` |
 | "Impact of changing X?" | Recursive CTE -- see \`.claude/index/repo-cognition/CLAUDE.md\` for full query |
-| "Is X dead code?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --orphans\` then grep for X |
-| "Has duplicates of X?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --duplicates\` |
-| "Hotspots / most-called?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --hotspots\` |
-| "Domain map?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --domains\` |
-| "Language breakdown?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --languages\` |
-| "Riskiest files?" | \`python ~/.claude/plugins/repo-cognition/scripts/query-index.py --riskiest\` |
+| "Is X dead code?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --orphans\` then grep for X |
+| "Has duplicates of X?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --duplicates\` |
+| "Hotspots / most-called?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --hotspots\` |
+| "Domain map?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --domains\` |
+| "Language breakdown?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --languages\` |
+| "Riskiest files?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --riskiest\` |
 
 ### Plugin Commands
 \`/index-status\` -- full dashboard | \`/index-rebuild\` -- force rebuild | \`/index-graph <name>\` -- call graph | \`/index-graph --hotspots\` -- most-called | \`/index-graph --orphans\` -- dead code
@@ -821,7 +821,7 @@ echo ""
 echo "=============================================="
 echo "  Installation Complete"
 echo "=============================================="
-echo "  Plugin:   ~/.claude/plugins/repo-cognition/"
+echo "  Plugin:   ~/.claude/plugins/less-toil/"
 echo "  Modules:  $(ls "${PLUGIN_DIR}/core/"*.py 2>/dev/null | wc -l) core"
 echo "  Hooks:    $(ls "${PLUGIN_DIR}/hooks/"*.py 2>/dev/null | wc -l) hook scripts"
 echo "  Commands: /index-status  /index-rebuild  /index-graph"
