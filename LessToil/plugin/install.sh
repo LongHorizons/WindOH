@@ -690,12 +690,12 @@ ${LANG_HINT:+${LANG_HINT} project.}${WORKSPACE_INFO:+ ${WORKSPACE_INFO}}
 
 \`\`\`bash
 # Primary: Query helper script (predefined queries)
-python ~/.claude/plugins/less-toil/scripts/query-index.py --symbol X
-python ~/.claude/plugins/less-toil/scripts/query-index.py --callers X
-python ~/.claude/plugins/less-toil/scripts/query-index.py --hotspots
+python3 ~/.claude/plugins/less-toil/scripts/query-index.py --symbol X
+python3 ~/.claude/plugins/less-toil/scripts/query-index.py --callers X
+python3 ~/.claude/plugins/less-toil/scripts/query-index.py --hotspots
 
 # Primary: Query helper script (any SQL)
-python ~/.claude/plugins/less-toil/scripts/query-index.py "SELECT * FROM files LIMIT 5"
+python3 ~/.claude/plugins/less-toil/scripts/query-index.py "SELECT * FROM files LIMIT 5"
 
 # Inline Python (always available, no script needed)
 python -c "
@@ -724,16 +724,16 @@ This applies to ALL agents and sub-agents. If the user sees \`[grep]\` repeatedl
 
 | You are asked | Use |
 |--------------|-----|
-| "Where is X defined?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --symbol X\` |
-| "Who calls X?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --callers X\` |
-| "What does X call?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py "SELECT ce.callee_name, ce.callee_file FROM call_edges ce JOIN symbols s ON ce.caller_id = s.id WHERE s.name = 'X'"\` |
+| "Where is X defined?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --symbol X\` |
+| "Who calls X?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --callers X\` |
+| "What does X call?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py "SELECT ce.callee_name, ce.callee_file FROM call_edges ce JOIN symbols s ON ce.caller_id = s.id WHERE s.name = 'X'"\` |
 | "Impact of changing X?" | Recursive CTE -- see \`.claude/index/repo-cognition/CLAUDE.md\` for full query |
-| "Is X dead code?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --orphans\` then grep for X |
-| "Has duplicates of X?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --duplicates\` |
-| "Hotspots / most-called?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --hotspots\` |
-| "Domain map?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --domains\` |
-| "Language breakdown?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --languages\` |
-| "Riskiest files?" | \`python ~/.claude/plugins/less-toil/scripts/query-index.py --riskiest\` |
+| "Is X dead code?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --orphans\` then grep for X |
+| "Has duplicates of X?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --duplicates\` |
+| "Hotspots / most-called?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --hotspots\` |
+| "Domain map?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --domains\` |
+| "Language breakdown?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --languages\` |
+| "Riskiest files?" | \`python3 ~/.claude/plugins/less-toil/scripts/query-index.py --riskiest\` |
 
 ### Plugin Commands
 \`/index-status\` -- full dashboard | \`/index-rebuild\` -- force rebuild | \`/index-graph <name>\` -- call graph | \`/index-graph --hotspots\` -- most-called | \`/index-graph --orphans\` -- dead code
