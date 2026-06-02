@@ -2,13 +2,17 @@
 
 **A behavioral telemetry intelligence platform that turns raw endpoint events into structured, validated, queryable, and trainable behavioral intelligence.**
 
+<p align="center">
+  <img src="WindOH.gif" alt="WindOH Platform">
+</p>
+
 ---
 
 ## READ THIS FIRST
 
-WindOH is not a SIEM. It is not an EDR. It is not a SOAR. It is a fundamentally different category of platform — one built around the idea that every observable action on an endpoint can be deterministically fingerprinted, permanently enriched, sequenced into a prediction model, and exported as AI training data.
+WindOH is not a SIEM. It is not an EDR. It is not a SOAR. It is a fundamentally different category of platform -- one built around the idea that every observable action on an endpoint can be deterministically fingerprinted, permanently enriched, sequenced into a prediction model, and exported as AI training data.
 
-If you only read two things, read this README and `WHY-WINDOH.md`. Then watch the platform walkthrough GIFs.
+If you only read two things, read this README and `WHY-WINDOH.md`.
 
 ---
 
