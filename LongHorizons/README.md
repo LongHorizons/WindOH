@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Wizard.gif" alt="LongHorizons Agent Setup Wizard">
+</p>
+
 # LongHorizons Telemetry Agent
 
 **Cross-platform kernel and cloud telemetry. Normalized to Elasticsearch. One schema across every surface.**
