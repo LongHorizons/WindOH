@@ -1,37 +1,71 @@
 # Windows Telemetry Agent
 
-ETW-based kernel and userspace telemetry collector for Windows 10/11 and Windows Server 2016+.
+ETW-based kernel and userspace telemetry for Windows 10/11 and Windows Server 2016+.
 
-## Features
-- 30+ ETW providers: kernel process/network/file/registry, security auditing, PowerShell, Defender, WMI, COM, .NET, SMB, RPC, WinHTTP, and more
-- Automatic provider discovery (200+ providers in "all" mode)
-- Process lineage tracking (parent/child/grandparent)
-- PE binary metadata (compile timestamp, section count, import entropy, debug path, PDB)
-- Command-line obfuscation analysis (PowerShell base64, caret escaping, IEX, download cradle detection)
-- IP geolocation and threat intel enrichment
-- Deterministic tokenization (stable + payload hashing for cross-host baselining)
-- Count-Min Sketch rarity estimation with exemplar reservoir sampling
-- Elasticsearch bulk export with gzip compression
-- SQLite outbox with retry and dead-letter queue
-- Windows service wrapper with stall detection and auto-recovery
-- Embedded config mode (PE overlay trailer)
+## Distribution
 
-## Install
-```powershell
-# Using wizard (recommended)
-.\wizard.exe install config.toml
+This release contains one binary: `wizard.exe`. It is the installer, the updater, and the agent — all in one. The agent binary is embedded inside the wizard at compile time via `build.rs` + `include_bytes!`. Running `wizard.exe install` extracts it.
 
-# Or smart mode (auto-detects existing install)
-.\wizard.exe config.toml
-
-# Manual install
-.\agent.exe install --config config.toml
+```
+wizard.exe          (24MB) — Installer + embedded agent
+config.example.toml         — Annotated configuration reference
+install.ps1                 — PowerShell install helper
 ```
 
-## Configuration
-See `config.example.toml` for full annotated configuration.
+## Install
+
+```powershell
+# Smart mode (auto-detects existing → update or fresh install)
+.\wizard.exe config.toml
+
+# Explicit fresh install
+.\wizard.exe install config.toml
+
+# With custom directory
+.\wizard.exe install config.toml --install-dir "C:\CustomPath"
+
+# Force (skip CHANGEME validation)
+.\wizard.exe install config.toml --force
+```
+
+## Uninstall
+
+```powershell
+.\wizard.exe uninstall              # Keep data
+.\wizard.exe uninstall --remove-data # Remove logs, state, database
+```
+
+## Update
+
+```powershell
+.\wizard.exe update config.toml     # Replace binary + config
+```
+
+## Status
+
+```powershell
+.\wizard.exe status                 # Show installed version, service state, upgrade history
+```
+
+## Wizard Embeds the Agent
+
+The wizard's `build.rs` finds the compiled `agent.exe` at build time and embeds it:
+
+```rust
+const AGENT_BYTES: &[u8] = include_bytes!(env!("AGENT_EXE_PATH"));
+```
+
+During `wizard install`, `AGENT_BYTES` is written to the install directory. The Windows service is created pointing to that extracted binary. No separate download. No network dependency.
+
+## Build from Source
+
+```powershell
+cd windows
+cargo build --release -p agent-service     # produces agent.exe
+cargo build --release -p wizard            # embeds agent.exe → produces wizard.exe
+```
 
 ## Requirements
 - Windows 10/11 or Windows Server 2016+
-- Administrator privileges (for ETW session creation)
+- Administrator (ETW session creation)
 - Elasticsearch 7.x or 8.x

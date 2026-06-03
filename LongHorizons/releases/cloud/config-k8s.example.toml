@@ -1,0 +1,5 @@
+# Kubernetes Agent — Example Configuration
+[agent] id = "k8s-prod-01"
+[kubernetes] audit_logs = true; pod_security = true; admission_reviews = true; network_policies = true; in_cluster = true; poll_interval_secs = 30
+# kubeconfig_path = "/home/user/.kube/config"
+[export.events] endpoint = "http://elasticsearch:9200/_bulk"; api_key = "CHANGEME"

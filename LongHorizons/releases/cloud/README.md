@@ -1,88 +1,80 @@
 # Cloud Telemetry Agent
 
-Multi-cloud telemetry collector — unified schema across AWS, Azure, GCP, Oracle, and Kubernetes.
+Multi-cloud API log collector. One agent, five providers, unified schema.
 
-## 5 Providers, One Agent
+## Distribution
+
+Each provider has its own wizard binary. Each wizard embeds the cloud agent inside it. Pick the wizard for your provider:
 
 ```
-cloud-agent run --config config.toml   # Starts all configured providers
+wizard-aws                  — AWS installer + embedded agent
+wizard-azure                — Azure installer + embedded agent
+wizard-gcp                  — GCP installer + embedded agent
+wizard-oracle               — Oracle OCI installer + embedded agent
+wizard-k8s                  — Kubernetes installer + embedded agent
+config-aws.example.toml     — AWS configuration reference
+config-azure.example.toml   — Azure configuration reference
+config-gcp.example.toml     — GCP configuration reference
+config-oracle.example.toml  — Oracle configuration reference
+config-k8s.example.toml     — Kubernetes configuration reference
+install.sh                  — Shell install helper
 ```
 
-Each provider is isolated in its own subdirectory with its own wizard.
+## Install
 
-### AWS — 9 Services
-| Source | What It Captures |
-|--------|-----------------|
-| CloudTrail | Every API call (RunInstances, AssumeRole, ConsoleLogin...) |
-| VPC Flow Logs | Network traffic metadata (ACCEPT/REJECT, bytes, packets) |
-| GuardDuty | Threat findings (recon, C2, crypto mining, anomaly) |
-| Security Hub | Aggregated compliance + findings across AWS services |
-| S3 Access Logs | Object-level GET/PUT/DELETE |
-| WAF Logs | Web application firewall (OWASP rules, rate limiting) |
-| Route53 Resolver | DNS query logs |
-| ELB Access Logs | ALB/NLB/CLB request logs |
-| AWS Config | Compliance rule evaluations (CIS, PCI, custom) |
-
-### Azure — 6 Services
-- Activity Log (management plane operations)
-- NSG Flow Logs (network security group)
-- Sentinel alerts (SIEM)
-- Azure AD Sign-in logs (authentication)
-- Key Vault logs (secret/key access)
-- Azure Policy (compliance)
-
-### GCP — 5 Services
-- Cloud Audit Logs (Admin Activity + Data Access)
-- VPC Flow Logs (network)
-- Security Command Center (findings)
-- Cloud Logging (application logs)
-- Access Transparency (Google admin access)
-
-### Oracle OCI — 4 Services
-- Audit Logs (all API operations)
-- VCN Flow Logs (network)
-- Cloud Guard (threat detection)
-- Events Service (resource lifecycle)
-
-### Kubernetes
-- API server audit logs
-- Pod security context violations
-- Admission controller reviews
-- Network policy events
-- In-cluster or kubeconfig authentication
-
-## Unified Schema
-All cloud events normalize into a single `CloudEvent`:
-```
-CloudEvent
-├── Actor (principal ARN, type, MFA, source IP, user agent)
-├── Resource (ARN, type, region, account, tags)
-├── Network (5-tuple, VPC/subnet, ACCEPT/REJECT)
-├── API Action (service, action, category, status, error)
-├── Authorization (Allow/Deny, policy, permissions)
-├── Threat (finding, severity 0-10, MITRE ATT&CK, indicator)
-└── Compliance (CIS/PCI/HIPAA, control, PASSED/FAILED)
-```
-
-## Per-Provider Wizards
 ```bash
 # AWS
-./wizard-aws init --region us-east-1
-./wizard-aws install config-aws.toml
+./wizard-aws init --region us-east-1 --agent-id prod-01
+sudo ./wizard-aws install config-aws.toml
 
 # Azure
-./wizard-azure init --tenant-id "CHANGEME"
-./wizard-azure install config-azure.toml
+./wizard-azure init --tenant-id "..." --agent-id prod-01
+sudo ./wizard-azure install config-azure.toml
 
 # GCP
-./wizard-gcp init --project-id "my-project"
-./wizard-gcp install config-gcp.toml
+./wizard-gcp init --project-id "my-project" --agent-id prod-01
+sudo ./wizard-gcp install config-gcp.toml
 
 # Oracle
-./wizard-oracle init --tenancy-ocid "ocid1..."
-./wizard-oracle install config-oracle.toml
+./wizard-oracle init --tenancy-ocid "ocid1..." --agent-id prod-01
+sudo ./wizard-oracle install config-oracle.toml
 
 # Kubernetes
-./wizard-k8s init
-./wizard-k8s install config-k8s.toml
+./wizard-k8s init --agent-id prod-01
+sudo ./wizard-k8s install config-k8s.toml
 ```
+
+## Uninstall / Update / Status
+
+```bash
+sudo ./wizard-aws uninstall --remove-data
+sudo ./wizard-aws update config-aws.toml
+./wizard-aws status
+```
+
+Same pattern for all providers — swap `wizard-aws` for your provider.
+
+## Coverage
+
+| Provider | Services |
+|----------|----------|
+| AWS (9) | CloudTrail, VPC Flow Logs, GuardDuty, Security Hub, S3 Access, WAF, Route53, ELB, Config |
+| Azure (6) | Activity Log, NSG Flow Logs, Sentinel, AD Sign-in, Key Vault, Policy |
+| GCP (5) | Cloud Audit Logs, VPC Flow Logs, SCC, Cloud Logging, Access Transparency |
+| Oracle (4) | OCI Audit, VCN Flow Logs, Cloud Guard, Events |
+| K8s (4) | Audit Logs, Pod Security, Admission Reviews, Network Policies |
+
+## Build from Source
+
+```bash
+cd cloud
+cargo build --release --target x86_64-unknown-linux-musl -p agent-service-cloud
+for wizard in wizard-aws wizard-azure wizard-gcp wizard-oracle wizard-k8s; do
+    cargo build --release --target x86_64-unknown-linux-musl -p "$wizard"
+done
+```
+
+## Requirements
+- Cloud provider credentials (IAM role, service principal, service account, API key)
+- Outbound HTTPS to cloud APIs + Elasticsearch
+- Elasticsearch 7.x or 8.x

@@ -1,0 +1,5 @@
+# Azure Cloud Agent — Example Configuration
+[agent] id = "azure-prod-01"
+[azure] tenant_id = "CHANGEME"; subscription_ids = ["CHANGEME"]; poll_interval_secs = 60
+[azure.services] activity_log = true; nsg_flow_logs = true; sentinel_alerts = true; ad_signin_logs = true; key_vault_logs = true; azure_policy = true
+[export.events] endpoint = "http://elasticsearch:9200/_bulk"; api_key = "CHANGEME"

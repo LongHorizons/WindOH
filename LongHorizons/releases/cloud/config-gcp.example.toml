@@ -1,0 +1,6 @@
+# GCP Cloud Agent — Example Configuration
+[agent] id = "gcp-prod-01"
+[gcp] project_ids = ["my-project-id"]; poll_interval_secs = 60
+# service_account_key_path = "/etc/cloud-agent/gcp-sa-key.json"
+[gcp.services] cloud_audit_logs = true; vpc_flow_logs = true; security_command_center = true; cloud_logging = true; access_transparency = true
+[export.events] endpoint = "http://elasticsearch:9200/_bulk"; api_key = "CHANGEME"

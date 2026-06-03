@@ -1,0 +1,45 @@
+# Linux Telemetry Agent — Example Configuration
+#
+# The agent auto-detects everything at startup. Most settings have sensible
+# defaults. Only the Elasticsearch endpoint truly needs configuration.
+
+[agent]
+id = "prod-linux-01"
+service_name = "telemetry-agent"
+config_reload_seconds = 60
+health_port = 8080
+
+[paths]
+data_dir = "/var/lib/telemetry-agent"
+db_name = "agent.db"
+
+# ── eBPF Configuration ───────────────────────────────────────────────────
+# The agent auto-detects the best capability tier. These overrides are for
+# testing or constrained environments.
+[ebpf]
+force_tier = "auto"           # "auto" | "ebpf-core" | "ebpf-legacy" | "auditd" | "netlink" | "proc"
+exclude_tracepoints = []      # e.g. ["sched:sched_process_exit"]
+max_programs = 0              # 0 = unlimited
+# prebuilt_dir = "/opt/telemetry-agent/prebuilt"
+
+# ── Normalization ────────────────────────────────────────────────────────
+[normalization]
+allow_raw_fields = true
+
+# ── Tokenization ─────────────────────────────────────────────────────────
+[tokenization]
+schema_version = 1
+
+# ── Baselining ───────────────────────────────────────────────────────────
+[baselining]
+reservoir_size_per_stable = 100
+decay_half_life_days = 7.0
+pattern_export_daily = true
+top_payload_k = 10
+
+# ── Export ───────────────────────────────────────────────────────────────
+[export.events]
+enable = true
+endpoint = "http://elasticsearch:9200/_bulk"
+batch_size = 500
+flush_interval_secs = 10

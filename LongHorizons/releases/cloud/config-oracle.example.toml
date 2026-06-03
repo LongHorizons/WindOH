@@ -1,0 +1,5 @@
+# Oracle Cloud Agent — Example Configuration
+[agent] id = "oracle-prod-01"
+[oracle] tenancy_ocid = "ocid1.tenancy.oc1..CHANGEME"; user_ocid = "CHANGEME"; regions = ["us-ashburn-1"]; key_fingerprint = "CHANGEME"; private_key_path = "/etc/cloud-agent/oci-key.pem"; poll_interval_secs = 60
+[oracle.services] audit_logs = true; vcn_flow_logs = true; cloud_guard = true; events_service = true
+[export.events] endpoint = "http://elasticsearch:9200/_bulk"; api_key = "CHANGEME"

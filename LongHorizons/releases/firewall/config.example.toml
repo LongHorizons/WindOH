@@ -1,0 +1,135 @@
+# Firewall Telemetry Agent — Example Configuration
+#
+# This agent collects firewall events from ANY source and normalizes them
+# into a single ES schema. It can run ON the firewall (nftables/iptables/pf)
+# or as a centralized collector (syslog + API pollers + cloud flow logs).
+
+[agent]
+id = "firewall-prod-01"
+mode = "hybrid"                    # "on-device" | "collector" | "hybrid"
+service_name = "firewall-agent"
+config_reload_seconds = 60
+
+[paths]
+data_dir = "/var/lib/firewall-agent"
+db_name = "firewall-agent.db"
+log_dir = "logs"
+state_dir = "state"
+
+# ── Sources ──────────────────────────────────────────────────────────────
+
+[sources]
+nftables = true                    # Modern Linux firewall (kernel 3.13+)
+iptables = true                    # Legacy Linux firewall
+pf = true                          # FreeBSD/pfSense/OPNsense pf
+
+[sources.syslog]
+enable = true
+udp_bind_addr = "0.0.0.0:514"     # Receives syslog from ANY firewall vendor
+tcp_enable = false
+tcp_bind_addr = "0.0.0.0:601"
+tls_enable = false                 # Set true for RFC 5425 TLS syslog
+
+# ── Enterprise Firewall API Pollers ──────────────────────────────────────
+# Uncomment and configure for each firewall you want to poll via REST API.
+
+# [[sources.api_pollers]]
+# vendor = "paloalto"
+# base_url = "https://panorama.local"
+# api_key = "CHANGEME"
+# poll_interval_secs = 30
+# verify_tls = true
+
+# [[sources.api_pollers]]
+# vendor = "fortinet"
+# base_url = "https://fortigate.local"
+# api_key = "CHANGEME"
+# poll_interval_secs = 30
+# verify_tls = false
+
+# [[sources.api_pollers]]
+# vendor = "cisco-fmc"
+# base_url = "https://fmc.local"
+# api_key = "CHANGEME"
+
+# [[sources.api_pollers]]
+# vendor = "checkpoint"
+# base_url = "https://mgmt-server.local"
+# api_key = "CHANGEME"
+
+# ── Cloud Firewall Flow Log Pollers ──────────────────────────────────────
+
+# [[sources.cloud_pollers]]
+# provider = "aws"
+# region = "us-east-1"
+# poll_interval_secs = 60
+
+# [[sources.cloud_pollers]]
+# provider = "azure"
+# region = "eastus"
+# poll_interval_secs = 60
+
+# [[sources.cloud_pollers]]
+# provider = "gcp"
+# region = "us-central1"
+# poll_interval_secs = 60
+
+# ── Normalization ────────────────────────────────────────────────────────
+
+[normalization]
+allow_raw_fields = true
+ip_stable_handling = "map"          # "preserve" | "map" — IP→class for tokenization
+anonymize_src_ip = false
+anonymize_dst_ip = false
+
+# ── Baselining ───────────────────────────────────────────────────────────
+
+[baselining]
+decay_half_life_days = 30.0
+rare_threshold = 10.0
+pattern_export_daily = true
+top_payload_k = 10
+reservoir_size_per_stable = 3
+outbox_retention_seconds = 604800   # 7 days
+
+# ── Enrichment ───────────────────────────────────────────────────────────
+
+[enrichment]
+geoip_enabled = false               # Set true and provide MaxMind GeoLite2 DBs
+geoip_db_path = "/var/lib/firewall-agent/GeoLite2-Country.mmdb"
+asn_enabled = false
+asn_db_path = "/var/lib/firewall-agent/GeoLite2-ASN.mmdb"
+threat_intel_enabled = false
+# abuseipdb_api_key = "CHANGEME"
+# virustotal_api_key = "CHANGEME"
+
+# ── Export to Elasticsearch ──────────────────────────────────────────────
+
+[export.events]
+enable = true
+endpoint = "http://elasticsearch:9200/_bulk"
+api_key = "CHANGEME"
+index_pattern = "firewall-events"
+gzip = true
+bulk_max_docs = 2000
+bulk_max_bytes = 5000000
+timeout_seconds = 30
+
+[export.diagnostics]
+enable = true
+endpoint = "http://elasticsearch:9200/_bulk"
+api_key = "CHANGEME"
+index_pattern = "firewall-diagnostics"
+gzip = true
+bulk_max_docs = 100
+bulk_max_bytes = 500000
+timeout_seconds = 15
+
+[export.health]
+enable = true
+endpoint = "http://elasticsearch:9200/_bulk"
+api_key = "CHANGEME"
+index_pattern = "firewall-health"
+gzip = true
+timeout_seconds = 15
+report_interval_seconds = 300

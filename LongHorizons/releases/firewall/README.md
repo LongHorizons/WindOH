@@ -1,49 +1,57 @@
 # Firewall Telemetry Agent
 
-Adaptive firewall log collector — run ON the firewall or as a centralized collector.
+Adaptive firewall log collector. Run on the firewall or as a centralized syslog receiver. 22+ vendors, 6 ingestion methods.
 
-## Coverage — 22+ Firewalls, 6 Ingestion Methods
+## Distribution
 
-| Method | Firewalls Covered |
-|--------|-------------------|
-| **nflog** (netlink) | nftables (Linux kernel 3.13+) |
-| **conntrack** (netlink) | Any Linux firewall |
-| **iptables** log tail | iptables (legacy) |
-| **pf** pflog | pfSense, OPNsense, FreeBSD pf |
-| **Syslog UDP 514** | Cisco ASA/FTD/IOS, Palo Alto, Fortinet, Check Point, Juniper SRX, SonicWall, Sophos XG/UTM, WatchGuard, MikroTik, Huawei USG, Hillstone, Barracuda — any syslog device |
-| **REST API** | Palo Alto Panorama, Fortinet FortiGate, Cisco FMC, Check Point Management |
-| **Cloud Flow Logs** | AWS VPC, Azure NSG, GCP Firewall Rules |
+This release contains `wizard-firewall` — the installer, updater, and agent in one binary. The agent is embedded inside the wizard at compile time.
 
-## Features
-- **Auto-detection** of firewall vendor from syslog messages (18 vendor patterns)
-- **Unified schema** — every firewall maps to the same FirewallEvent (5-tuple, NAT, rule ID, threat, app/user, session bytes)
-- **Connection tracking** — conntrack NEW/UPDATE/DESTROY events without nftables rules
-- **NAT translation tracking** — pre/post SNAT/DNAT IP and port
-- **Threat enrichment** — CVE, MITRE ATT&CK, IPS signature, file hash
-- **GeoIP enrichment** — country, ASN for src/dst IPs (MaxMind GeoLite2)
-- **3 operating modes**: on-device (runs on firewall), collector (syslog + API), hybrid (both)
-- Systemd, OpenRC, sysvinit, runit service support
+```
+wizard-firewall             — Installer + embedded agent (~12MB static musl)
+config.example.toml         — Annotated configuration reference
+install.sh                  — Shell install helper
+```
 
 ## Install
+
 ```bash
-# Generate config
+# Generate default config
 ./wizard-firewall init --agent-id fw-prod-01 --endpoint https://es:9200/_bulk
 
-# Edit config.toml — replace CHANGEME values
-# Install
+# Smart mode
+sudo ./wizard-firewall config.toml
+
+# Explicit install
 sudo ./wizard-firewall install config.toml
-
-# Or run directly
-sudo ./firewall-agent run --config config.toml
-sudo ./firewall-agent probe
 ```
 
-## Configuration
+## Uninstall / Update / Status
+
+```bash
+sudo ./wizard-firewall uninstall --remove-data
+sudo ./wizard-firewall update config.toml
+./wizard-firewall status
 ```
-[agent]        id, mode (on-device/collector/hybrid)
-[sources]      nftables, iptables, pf, syslog (UDP/TCP/TLS)
-[sources.api_pollers]   Palo Alto, Fortinet, Cisco, Check Point
-[sources.cloud_pollers] AWS, Azure, GCP
-[enrichment]   GeoIP, ASN, AbuseIPDB, VirusTotal
-[export]       Elasticsearch events + diagnostics + health
+
+## Operating Modes
+
+| Mode | Description |
+|------|-------------|
+| `on-device` | Runs nftables/conntrack or pf directly on the firewall |
+| `collector` | Listens for syslog on UDP 514 + polls REST APIs + cloud flow logs |
+| `hybrid` | Both (default) |
+
+Set in config.toml: `[agent] mode = "hybrid"`
+
+## Build from Source
+
+```bash
+cd firewall
+cargo build --release --target x86_64-unknown-linux-musl -p agent-service-firewall
+cargo build --release --target x86_64-unknown-linux-musl -p wizard-firewall
 ```
+
+## Requirements
+- Linux kernel 2.6+ (3.13+ for nftables)
+- CAP_NET_RAW + CAP_NET_BIND_SERVICE (for nflog/syslog)
+- Elasticsearch 7.x or 8.x
