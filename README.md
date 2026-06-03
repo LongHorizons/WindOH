@@ -12,6 +12,10 @@
   <img src="Compute/Compute.gif" alt="HotStuff Workstation">
 </p>
 
+<p align="center">
+  <img src="LessVolatile/LessVolatile.gif" alt="LessVolatile Memory Forensics">
+</p>
+
 **Behavioral telemetry collection and analysis, memory forensics at scale, covert forensic triage, and multi-threaded Atomic Red Team execution for Windows environments.**
 
 ---

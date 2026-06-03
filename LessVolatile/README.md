@@ -1,6 +1,10 @@
 # LessVolatile
 
-**Self-contained, multi-OS memory forensics launcher — one binary, no install.**
+**Self-contained, multi-OS memory forensics launcher -- one binary, no install.**
+
+<p align="center">
+  <img src="LessVolatile.gif" alt="LessVolatile">
+</p>
 
 LessVolatile wraps [Volatility 3](https://github.com/volatilityfoundation/volatility3) and an embeddable Python runtime into a single Rust executable. Point it at a memory dump (or a directory of hundreds), and it runs every relevant plugin in parallel, converts all output to CSV, and produces a structural fingerprint per capture for cross-case correlation.
 
