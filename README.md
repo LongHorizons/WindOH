@@ -30,7 +30,7 @@ Three components answer this question at different altitudes:
 
 | Component | Role | Scale |
 |---|---|---|
-| **LongHorizons Agent** | Rust binary (~8 MB). Captures real-time ETW from 200+ kernel and user-mode providers. Decomposes every event into a stable token (the WHAT -- a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO -- the instance-specific details). Baselined, rarity-scored, exported. Runs as a Windows service. No runtime dependencies. | One per endpoint |
+| **LongHorizons Agent** | Rust binary (~8 MB). Cross-platform telemetry agent for Windows (ETW), Linux (eBPF adaptive ladder), firewall appliances (nflog/conntrack/syslog/REST), and cloud APIs (AWS/Azure/GCP/Oracle/Kubernetes). Decomposes every event into a stable token (the WHAT -- a SHA-256 of the behavioral skeleton) and a payload token (the WHEN/WHERE/WHO -- the instance-specific details). Baselined, rarity-scored, exported. Runs as a native service with no runtime dependencies. | One per endpoint/appliance |
 | **WindOH Application** | TypeScript/Next.js web app. Polls Elasticsearch for new tokens, enriches each unique payload token via a local LLM, caches enrichment permanently in MongoDB, builds Markov transition matrices from temporal event sequences, maps Atomic Red Team executions against captured telemetry. | One per fleet |
 | **LessAtomic** | Rust binary (~5 MB). Embeds 265 Atomic Red Team technique YAML files (752 atomic tests) at compile time. Multi-threaded execution via Rayon work-stealing. Variable interpolation, dependency resolution, pass/fail/skip/timeout reporting. No runtime dependencies -- no Python, no PowerShell modules. | On-demand |
 | **LessVolatile + OneDriveStandaloneUpdaterr** | Memory forensics at scale. 68 Volatility plugins run in parallel with fingerprint-based deduplication across cases. Covert forensic triage via KAPE, PsExec, and EZ Tools. | On-demand |
@@ -45,20 +45,20 @@ WindOH fixes this at the source. Same behavior = same stable token = stored once
 
 The tokenization model itself is operating-system-agnostic. A behavioral skeleton -- process lineage, operation type, normalized parameters with ephemera stripped -- abstracts the same way whether the event originates from ETW on Windows, auditd on Linux, osquery on macOS, CloudTrail in AWS, or Activity Logs in Azure. The same stable token / payload token separation applies to all of them: extract the invariant WHAT, isolate the instance-specific WHEN/WHERE/WHO, enrich once, cache permanently. The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- runs on infrastructure you control: on-prem, air-gapped, or inside your VPC on AWS, Azure, or OCI.
 
-**Coming soon across every surface:**
+**Architected across every surface:**
 
 | Platform | Telemetry Source | Status |
 |---|---|---|
-| **Windows** | ETW kernel + user-mode (200+ providers), PowerShell script blocks, Defender detections, AppLocker, SAC | Validating now against Atomic Red Team coverage matrix |
-| **Linux** | auditd, eBPF tracepoints, /proc filesystem, systemd journal, iptables/netfilter | Planned -- auditd event type + subject/object tuple maps directly to stable token skeleton; eBPF ring buffer delivery mirrors ETW session architecture; /proc polling provides process lineage equivalent to Windows PEB traversal |
-| **macOS** | Endpoint Security Framework (ESF), Unified Log, osquery, OpenBSM audit | Planned -- ESF event subscription + message handler pattern is architecturally identical to ETW trace sessions; ES_EVENT_TYPE_NOTIFY_EXEC, FORK, and RENAME map to ProcessCreate, ProcessEnd, and FileWrite token builders; Unified Log predicate filtering mirrors ETW provider-level enablement |
-| **Android** | adb logcat, dumpsys, /proc, SELinux AVC audit, Network Stats Manager | Planned -- logcat buffer (main, system, events, crash, kernel) with tag/severity filtering provides the same per-source enablement model as ETW provider GUIDs; /proc/net/{tcp,udp} and /proc/pid/stat supply process and network skeletons equivalent to Windows process genealogy and TCP/UDP ETW events |
-| **Cloud (AWS)** | CloudTrail management + data events, VPC Flow Logs, EKS audit logs, GuardDuty findings | Planned -- CloudTrail eventVersion + eventSource + eventName form a three-field behavioral skeleton directly analogous to ETW provider + event ID + opcode; S3 event notifications feed into the same ES bulk ingest path; VPC Flow Logs accept/reject + protocol + port tuple replaces Windows network_connect token fields |
-| **Cloud (Azure)** | Activity Log, Monitor resource logs, NSG flow logs, Defender for Cloud alerts, AKS audit | Planned -- Activity Log caller + operationName + resourceId maps to the stable token's actor + operation + target triple; Event Hub partitioning scheme aligns with the existing sharded pipeline (shard by subscription ID or resource group, same as shard by PID hash on Windows) |
-| **Cloud (OCI)** | Audit logs, Service Connector Hub, VCN flow logs, Cloud Guard findings | Planned -- OCI audit eventType + sourceIp + resourceId maps to the same behavioral skeleton structure; Service Connector Hub event routing mirrors ES bulk export pattern; VCN flow log action + protocol + stateless flag replaces Windows firewall/network event fields |
-| **Kubernetes** | API Server audit logs, admission controller webhooks, container runtime events via containerd/cri-o | Planned -- audit.k8s.io event objectRef.resource + verb + namespace forms a stable behavioral triple identical in shape to Windows process lineage + operation type; admission webhook (ValidatingWebhook + MutatingWebhook) reject/allow decisions map to AppLocker policy evaluation tokens; containerd task create/start/delete events map to ProcessCreate/ProcessEnd builders |
+| **Windows** | ETW kernel + user-mode (200+ providers), PowerShell script blocks, Defender detections, AppLocker, SAC, PE metadata, process forensics, browser artifacts, registry diff | Validating now against Atomic Red Team coverage matrix |
+| **Linux** | eBPF CO-RE (12 kernel probes, 5-tier adaptive ladder), auditd, fanotify, /proc polling | Architected -- eBPF CO-RE for kernel 5.4+, legacy eBPF for 4.x, auditd+fanotify for 3.x+, /proc polling as universal fallback. Full architecture in [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md) |
+| **Firewall** | On-device (nftables/nflog, iptables, pf), syslog collector (UDP 514, 18 vendor parsers), REST API pollers (Palo Alto, Fortinet, Cisco), cloud flow logs (AWS VPC, Azure NSG, GCP) | Architected -- Three operating modes (on-device, collector, hybrid). 22+ vendors. GeoIP/ASN enrichment. Full architecture in [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md) |
+| **Cloud** | AWS (9 services), Azure (6), GCP (5), Oracle (4), Kubernetes (4) | Architected -- Unified CloudEvent schema across all providers. IAM, network, threat, and compliance fields. Full architecture in [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md) |
+| **macOS** | Endpoint Security Framework (ESF), Unified Log, osquery, OpenBSM audit | Planned -- ESF event subscription + message handler pattern is architecturally identical to ETW trace sessions |
+| **Android** | adb logcat, dumpsys, /proc, SELinux AVC audit, Network Stats Manager | Planned -- logcat buffer with tag/severity filtering mirrors ETW provider enablement model |
+| **OT/IoT** | Modbus, BACnet, MQTT protocol monitoring | Planned -- See [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md#extending-to-new-platforms) |
+| **SaaS** | Office 365 Management API, Salesforce Event Monitoring, GitHub Audit Log | Planned -- See [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md#extending-to-new-platforms) |
 
-Each platform generates the same stable token / payload token pair. Enrichment runs once per payload token, cached permanently, regardless of which platform produced it. A detection written against a Windows process-create event generalizes to an execve auditd event, a fork ESF event, and a container runtime event -- because they all reduce to the same behavioral skeleton. The operator experience described above is the same on every surface. This begins shipping after Windows validation, Atomic Red Team coverage measurement, and the WindOH.us pipeline reach parity.
+Each platform generates the same stable token / payload token pair. Enrichment runs once per payload token, cached permanently, regardless of which platform produced it. A detection written against a Windows process-create event generalizes to an execve auditd event, a fork ESF event, and a container runtime event -- because they all reduce to the same behavioral skeleton. The operator experience described above is the same on every surface.
 
 ### What the Operator Experience Should Feel Like
 
@@ -336,27 +336,26 @@ Enrichment is permanently cached in MongoDB -- once per payload token, never rep
 
 ### LongHorizons -- Endpoint Telemetry Agent
 
-**Rust. Single ~8 MB binary. No runtime dependencies. Runs as a Windows service under LocalSystem.**
+**Rust. Single ~8 MB binary. No runtime dependencies. Runs as a native service (Windows SCM / systemd / OpenRC / sysvinit / runit).**
 
-Captures real-time ETW events from 47 kernel and user-mode providers: process/thread/network/file/registry activity, DNS client, PowerShell script blocks and pipeline execution, Windows Defender detections, SChannel TLS handshakes, RPC and COM operations, WMI activity, AppLocker policy evaluation, Hyper-V events, and more.
+Cross-platform telemetry agent spanning four surfaces: Windows endpoints, Linux servers, firewall appliances, and cloud APIs. Every platform feeds into the same ingestion pipeline: platform-specific mapping → normalized schema → deterministic tokenization → Count-Min Sketch rarity estimation → exemplar reservoir sampling → SQLite outbox → Elasticsearch bulk export.
 
-Each event traverses an 8-way hash-sharded pipeline:
-```
-TDH property extraction
-  → semantic event typing
-  → process cache population
-  → enrichment computation (inter-event timing, lineage, tags, burst metrics, PE metadata, network correlation, field completeness)
-  → deterministic tokenization (stable_token + payload_token)
-  → Count-Min Sketch baselining with exponential decay
-  → reservoir sampling for exemplars
-  → durable SQLite outbox
-  → gzip-compressed Elasticsearch bulk export (retry + dead-letter)
-```
+**Windows:** Captures real-time ETW events from 47 kernel and user-mode providers: process/thread/network/file/registry activity, DNS client, PowerShell script blocks and pipeline execution, Windows Defender detections, SChannel TLS handshakes, RPC and COM operations, WMI activity, AppLocker policy evaluation, Hyper-V events, and more. Additional collection surfaces: PE metadata parsing, process forensics (PEB walking, module enumeration, TCP table snapshot), browser artifact scanning (Chrome/Firefox/Edge history and downloads), and registry hive diff with ROT-13 heuristic for obfuscated key names.
+
+**Linux:** 5-tier adaptive eBPF ladder auto-selected at startup (~50ms probe). eBPF CO-RE for kernel 5.4+ (12 probes: exec, exit, fork, execve, tcp_connect, tcp_accept, dns, file_open, file_write, file_delete, module_load, capability, mount). Legacy eBPF for 4.x. auditd + fanotify for 3.x+. netlink + inotify for 2.6.x+. /proc polling as universal fallback with 1-second resolution.
+
+**Firewall:** Three operating modes (on-device, collector, hybrid). On-device sources: nftables (nflog netlink + conntrack events), iptables (kern.log/ulogd), pf (/dev/pflog0). Collector sources: syslog UDP 514 (RFC 3164/5424, 18 vendor auto-detectors), REST API pollers (Palo Alto Panorama, Fortinet FortiGate, Cisco FMC, Check Point), cloud flow logs (AWS VPC, Azure NSG, GCP). GeoIP/ASN enrichment via MaxMind GeoLite2.
+
+**Cloud:** 24 services across 5 providers (AWS 9, Azure 6, GCP 5, Oracle 4, Kubernetes 4). Unified CloudEvent schema covering actor identity, resource, network 5-tuple, API action, authorization decision, threat finding, compliance status, and IP context. Per-provider credential chains with concurrent API polling.
+
+The shared pipeline processes every event identically across all platforms:
 
 - Encryption at rest: AES-256-GCM with purpose-specific keys derived via HKDF-SHA256 from a DPAPI-protected master key
 - Concurrency: `parking_lot::Mutex` in the hot path; 8 independent shards eliminate lock contention on CMS and reservoir
 - Storage: SQLite WAL mode for concurrent read (exporter) and write (pipeline) access
 - Token determinism: enrichment fields use `#[serde(skip_serializing_if)]` and are excluded from hash computation
+
+Full per-platform architecture: [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md)
 
 ### WindOH -- Behavioral Intelligence Application
 
@@ -485,21 +484,20 @@ WindOH/
 ├── README.md                         This file
 ├── ENGINEERING_PRINCIPLES.md         Design rationale and decision framework
 │
-├── LongHorizons/                     Rust telemetry agent
-│   ├── README.md                     Overview, quick start, use cases
-│   ├── ARCHITECTURE.md               Crate map, event lifecycle, concurrency model,
-│   │                                 security architecture, design decisions
+├── LongHorizons/                     Rust telemetry agent (multi-platform)
+│   ├── README.md                     Overview, scope, design decisions, quick start
+│   ├── ARCHITECTURE.md               Full system architecture: shared pipeline,
+│   │                                 tokenization, CMS, reservoir, SQLite outbox,
+│   │                                 per-platform detail (Windows/Linux/Firewall/Cloud)
 │   ├── ES-INDEX-TEMPLATES.md         Elasticsearch mappings, ILM retention policy,
 │   │                                 API key provisioning
-│   ├── WindOH.md                     WindOH application handoff document: full
-│   │                                 architecture, MongoDB schema, LLM prompt design,
-│   │                                 Markov engine, ART integration, SearXNG client,
-│   │                                 tRPC API design, implementation plan
-│   ├── config.toml                   Annotated 580-line deployment configuration
-│   ├── install.ps1                   Windows service installer (PowerShell)
-│   ├── uninstall.ps1                 Service uninstaller with data removal option
+│   ├── CONFIG-GUIDE.md               Configuration walkthrough (step-by-step)
 │   ├── Wizard.gif                    Agent setup wizard demonstration
-│   └── release.zip                   Pre-built agent binary (~3.6 MB)
+│   └── releases/                     Per-platform release packages
+│       ├── windows/                  Windows: install.ps1, config.toml, wizard.exe
+│       ├── linux/                    Linux: install.sh
+│       ├── firewall/                 Firewall: install.sh
+│       └── cloud/                    Cloud: install.sh
 │
 ├── LessAtomic/                       Rust Atomic Red Team test executor
 │   ├── README.md                     Overview, architecture, CLI reference, ethics
@@ -620,7 +618,7 @@ Security engineering and systems development at this depth commands a market rat
 | **M1: LessAtomic Release** | Complete | Build system, embedded YAML validation, Rayon thread pool | Done |
 | **M2: LessVolatile + OneDriveStandaloneUpdaterr Release** | Complete | Embedded dependency resolution, cross-case fingerprinting | Done |
 | **M3: LessToil Public Distribution** | Complete | install.ps1 / install.sh, tree-sitter grammars, plugin.json | Done |
-| **M4: LongHorizons Agent Validation** | In progress | Full ART coverage matrix pass, config.toml finalization, service hardening | 80% |
+| **M4: LongHorizons Agent Validation** | In progress | Full ART coverage matrix pass, Windows ETW validation, per-platform release packaging | 80% |
 | **M5: WindOH Application Deployment** | Pending | windoh.us DNS/SSL, Elasticsearch/MongoDB/Redis provisioning, vLLM endpoint integration | Planned |
 | **M6: Platform Integration Testing** | Pending | M4 + M5 complete, end-to-end telemetry pipeline (agent -> ES -> API -> LLM -> MongoDB), Markov chain validation | Planned |
 | **M7: Cross-Platform Agent Expansion** | Pending | Linux auditd/eBPF agent, macOS ESF agent, Kubernetes audit agent | Planned |
@@ -676,12 +674,35 @@ No runtime dependencies. Single static binary. Embeds 265 technique YAML files a
 ### Continuous Telemetry (LongHorizons)
 
 ```powershell
-# Administrator PowerShell on the Windows endpoint:
-cd LongHorizons
-.\install.ps1 -BinaryPath ".\agent.exe" -ConfigPath ".\config.toml"
+# Windows
+cd LongHorizons\releases\windows
+.\wizard.exe install config.toml     # Fresh install
+.\wizard.exe config.toml             # Smart mode (detect existing → update or install)
 ```
 
-Edit `config.toml` to set `agent.id`, Elasticsearch endpoint, and API key. The agent installs as a Windows service with automatic startup and failure recovery. Apply the index templates from [ES-INDEX-TEMPLATES.md](LongHorizons/ES-INDEX-TEMPLATES.md).
+```bash
+# Linux (musl static — one binary, every distro)
+cd LongHorizons/releases/linux
+sudo ./wizard install config.toml
+```
+
+```bash
+# Firewall (on-device or collector mode)
+cd LongHorizons/releases/firewall
+sudo ./wizard-firewall init --agent-id fw01
+sudo ./wizard-firewall install config.toml
+```
+
+```bash
+# Cloud (per-provider wizards)
+cd LongHorizons/releases/cloud
+./wizard-aws init --region us-east-1
+./wizard-aws install config-aws.toml
+```
+
+Edit your platform's `config.toml` to set agent identity, Elasticsearch endpoint, and API key. The agent installs as a native service with automatic startup and failure recovery. Apply the index templates from [ES-INDEX-TEMPLATES.md](LongHorizons/ES-INDEX-TEMPLATES.md).
+
+Full per-platform documentation: [LongHorizons/README.md](LongHorizons/README.md) and [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCHITECTURE.md).
 
 ### Behavioral Intelligence Platform (WindOH)
 

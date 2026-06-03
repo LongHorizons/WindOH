@@ -1,471 +1,402 @@
-# Architecture — LongHorizons Telemetry Agent
+# Architecture
 
-## Crate Dependency Graph
+## System Context
 
 ```mermaid
 graph TB
-    subgraph Binary["agent-service (binary)"]
-        main["main.rs — CLI + Windows Service"]
-        health["health.rs — ES health reporting"]
-        diagnostic["diagnostic.rs — self-monitoring"]
+    ES[("Elasticsearch<br/>events · exemplars<br/>patterns · diagnostics<br/>health")]
+
+    subgraph Windows
+        ETW[ETW Kernel + User Providers]
+        TDH[TDH Parser]
+        PE[PE Metadata]
+        PF[Process Forensics]
     end
 
-    subgraph ETW["agent-etw — ETW Capture & Parsing"]
-        session["session.rs — StartTraceW, EnableTraceEx2, ProcessTrace"]
-        mapping["mapping.rs — Raw event → NormalizedEvent"]
-        tdh["tdh.rs — TDH property parsing, BOM-aware UTF-16 decode"]
-        semantic["semantic.rs — Provider-agnostic field classifier"]
-        ntstatus["ntstatus.rs — 500+ NTSTATUS/HRESULT/DNS error codes"]
-        event_desc["event_descriptions.rs — Provider/event_id → human-readable names"]
-        discovery["discovery.rs — Provider auto-detection"]
-        provider_f["provider_fields.rs + provider_registry.rs"]
+    subgraph Linux
+        eBPF[eBPF CO-RE Probes]
+        AUDIT[auditd]
+        FAN[fanotify]
+        PROC[/proc Polling]
     end
 
-    subgraph Core["agent-core — Normalization & Baselining"]
-        models["models.rs — NormalizedEvent (200+ fields, 15 structs)"]
-        normalization["normalization.rs — SID/IP/path/guid normalization"]
-        tokenization["tokenization.rs — Deterministic base/payload token hashing"]
-        pipeline["pipeline.rs — BaseliningPipeline, process cache, ES doc builder"]
-        sharded["sharded_pipeline.rs — 8-way hash-sharded ingest"]
-        cms["cms.rs — Count-Min Sketch"]
-        reservoir["reservoir.rs — Exemplar reservoir sampling"]
-        db["db.rs — SQLite WAL, AES-256-GCM encrypted blobs"]
-        crypto["crypto.rs — HKDF-SHA256 key derivation"]
-        process_f["process_forensics.rs — PEB command-line reader"]
-        terms["terms.rs — Search term extraction"]
+    subgraph Firewall
+        NF[nftables/nflog]
+        SYS[syslog UDP 514]
+        API[REST API Pollers]
+        CLD[Cloud Flow Logs]
     end
 
-    subgraph Export["agent-exporter — Elasticsearch Export"]
-        bulk["bulk.rs — ES _bulk API, gzip, retry, mapping conflict detection"]
-        worker["worker.rs — Outbox poller"]
+    subgraph Cloud
+        AWS[AWS 9 services]
+        AZURE[Azure 6 services]
+        GCP[GCP 5 services]
+        OCI[Oracle 4 services]
+        K8S[Kubernetes 4 services]
     end
 
-    Binary --> ETW
-    Binary --> Core
-    Binary --> Export
-    ETW --> Core
-    Core --> Export
+    ETW & TDH & PE & PF --> ES
+    eBPF & AUDIT & FAN & PROC --> ES
+    NF & SYS & API & CLD --> ES
+    AWS & AZURE & GCP & OCI & K8S --> ES
 ```
 
----
+## Shared Pipeline
 
-## Event Lifecycle
+Every platform feeds into the same ingestion pipeline. The platform-specific work is the mapping layer. Everything downstream is shared logic.
 
 ```mermaid
 flowchart LR
-    subgraph Phase1["Phase 1: ETW Capture"]
-        A["Windows Kernel"] -->|"EVENT_RECORD"| B["ProcessTrace callback"]
-        B --> C["TdhGetEventInformation()"]
-        C --> D["TdhGetProperty() × N"]
-        D --> E["bytes_to_json_value()"]
+    subgraph Platform["Platform-Specific Mapping"]
+        RAW[Raw Kernel/Network/Cloud Event]
     end
 
-    subgraph Phase2["Phase 2: Data Sanitization"]
-        E --> F{"All-zero bytes?"}
-        F -->|yes| NULL1["→ Null"]
-        F -->|no| G{"UTF-16 LE decode"}
-        G -->|"printable?"| H["→ String"]
-        G -->|"CJK/PUA >40%?"| I["UTF-16 BE fallback"]
-        I --> H
-        G -->|"garbage"| J{"printable ratio >50%?"}
-        J -->|yes| K["→ {hex, raw}"]
-        J -->|no| NULL2["→ Null"]
+    subgraph Pipeline["Shared Pipeline"]
+        direction TB
+        MAP[Normalize to Schema]
+        TOK[Tokenization<br/>base + payload hashes]
+        SAN[Sanitization<br/>reject garbage patterns]
+        CMS[Count-Min Sketch<br/>frequency estimation]
+        RAR{Rarity Band}
+        RES[Exemplar Reservoir<br/>fixed-size per base token]
+        OUT[SQLite Outbox<br/>3 priority tiers]
+        EXP[ES Bulk Export<br/>gzip • retry • dead-letter]
     end
 
-    subgraph Phase3["Phase 3: Semantic Classification"]
-        H --> L["classify_fields() — pattern match on TDH property names"]
-        K --> L
-        L --> M["infer_event_type() — provider-aware type inference"]
-        M --> N["49 event types recognized"]
-    end
-
-    subgraph Phase4["Phase 4: Enrichment"]
-        N --> O["PEB command-line backfill"]
-        O --> P["NTSTATUS → human-readable"]
-        P --> Q["DNS codes → names"]
-        Q --> R["Integrity → name resolution"]
-        R --> S["File attributes → decoded"]
-        S --> T["IP class + port service names"]
-        T --> U["Parent/grandparent cache backfill"]
-    end
-
-    subgraph Phase5["Phase 5: Tokenization"]
-        U --> V["build_tokens() — 49 type-specific builders"]
-        V --> W["sanitize_token_value() — reject AAA=, hex pointers, numeric IDs"]
-        W --> X["base_hash = SHA-256(behavior skeleton)"]
-        W --> Y["payload_hash = SHA-256(behavior + details)"]
-    end
-
-    subgraph Phase6["Phase 6: Baselining"]
-        X --> Z["CMS frequency estimation"]
-        Y --> Z
-        Z --> AA["Decay-weighted rarity scoring"]
-        AA --> AB["Reservoir sampling for exemplars"]
-        AB --> AC["Write to outbox tables"]
-    end
-
-    subgraph Phase7["Phase 7: Export"]
-        AC --> AD["Bulk assembly (gzip)"]
-        AD --> AE["POST /_bulk"]
-        AE -->|success| AF["Mark sent"]
-        AE -->|"400 mapping conflict"| AG["Log field name + reason"]
-        AE -->|"429/5xx"| AH["Retry with backoff"]
-    end
+    RAW --> MAP
+    MAP --> TOK
+    TOK --> SAN
+    SAN --> CMS
+    CMS --> RAR
+    RAR -->|"Rare ≤2"| RES
+    RAR -->|"Uncommon 3–20"| RES
+    RAR -->|"Common >20"| OUT
+    RES --> OUT
+    OUT --> EXP
+    EXP --> ES[("Elasticsearch")]
 ```
 
----
+### Tokenization
 
-## Semantic Classification Pipeline
+Each event produces two SHA-256 hashes:
 
-```mermaid
-flowchart TD
-    EVENT["Raw ETW Event\n(provider + event_id + TDH properties)"]
+**Base token** (structural identity). Fields that describe *what* happened: process image name, directory class, parent process, destination port, protocol, IP class. Two hosts running `bash` from `/usr/bin/` produce the same base hash regardless of hostname, timestamp, or command-line arguments.
 
-    EVENT --> GUESS["guess_event_type()\nProvider + event_id → type hint"]
-    GUESS --> CLASSIFY["classify_fields()\nMatch TDH property names against\n15 field-type pattern sets"]
+**Payload token** (instance data). Fields that describe *this specific occurrence*: full command line, source/destination IP, file path, user, session. Same base, different payload = same behavior, different instance.
 
-    CLASSIFY --> PROC["Process patterns\n(pid, image, cmdline, integrity, user)"]
-    CLASSIFY --> NET["Network patterns\n(src_ip, dst_ip, port, protocol, state)"]
-    CLASSIFY --> FILE["File patterns\n(path, name, operation, size, attributes)"]
-    CLASSIFY --> REG["Registry patterns\n(key_path, value_name, hive, operation)"]
-    CLASSIFY --> DNS["DNS patterns\n(query_name, query_type, response_code)"]
-    CLASSIFY --> WMI["WMI patterns\n(operation, namespace, query, consumer)"]
-    CLASSIFY --> IMG["Image Load patterns\n(module_path, checksum, timestamp, signature)"]
-    CLASSIFY --> HOST["Host patterns\n(os_version, build)"]
+Token sanitization runs before hashing. Strings that match garbage patterns are rejected rather than hashed: base64 artifacts that decode to null bytes (`AAA=`), hex pointers (`0xffffe084d6d5bc70`), pure numeric IDs over 6 digits, Unicode replacement characters, control characters. This prevents TDH/eBPF decoding artifacts from creating spurious unique patterns.
 
-    PROC --> VALIDATE["Field Validation Layer"]
-    NET --> VALIDATE
-    FILE --> VALIDATE
-    REG --> VALIDATE
-    DNS --> VALIDATE
-    WMI --> VALIDATE
-    IMG --> VALIDATE
-    HOST --> VALIDATE
+### Count-Min Sketch
 
-    VALIDATE --> V1{"looks_like_file_path()?\nRejects: pure numbers,\nhex pointers, GUIDs"}
-    VALIDATE --> V2{"is_bogus_tdh_string()?\nRejects: AAA=, all-null base64,\nsingle-char garbage"}
-    VALIDATE --> V3{"is_hex_pointer()?\nRejects: 0x... ≥10 hex digits"}
-    VALIDATE --> V4{"Printable ratio check?\nRejects: <50% printable,\ncontrol characters"}
+Four independent hash functions estimate the frequency of each base token. Memory cost is constant regardless of unique token count (16,384 × 4 × 8 bytes = 512 KB per CMS instance).
 
-    V1 -->|yes| FIELDS["Clean NormalizedEvent Fields"]
-    V2 -->|no| FIELDS
-    V3 -->|no| FIELDS
-    V4 -->|yes| FIELDS
+Rarity bands:
+- **Rare** (≤2 estimated occurrences) — event exported immediately as an exemplar
+- **Uncommon** (3–20) — periodic pattern document with top-k payload variants
+- **Common** (>20) — aggregate pattern only, individual events sampled
 
-    FIELDS --> INFER["infer_event_type(event, provider_hint)\n49 types: dns_query, registry, file,\nnetwork_connect, wmi, image_load,\nantimalware, com_classic, rpcss,\ncapi2, ntfs, win32k, schannel,\nappmodel, shell_core, system_trace,\nmemory_operation, power_state,\nboot_event, bits_client,\nfilter_manager, dotnet_runtime,\nwininet, winhttp, service,\nsmb_client, vbscript,\ntask_scheduler, applocker,\ndefender*, threat_intelligence,\nbrowser_history, browser_download,\nregistry_snapshot_diff, process_forensic,\nthread_operation, process_start/end/operation,\ngeneric"]
+### Exemplar Reservoir
 
-    FIELDS --> DESC["Description Enrichment\nevent_name = get_event_name()\nseverity = get_severity_name()\ncategory = get_category_name()\ndescription_raw = formatted summary"]
-```
+Each base token maintains a fixed-size reservoir (default: 3 events). When a new event arrives, it may replace an existing exemplar based on richness score. The reservoir guarantees that exemplar export always has a representative event to attach, even if the event that triggered the "new base" detection was itself sampled out.
 
----
+### SQLite Outbox
 
-## Data Sanitization — Garbage Detection
+Three priority tiers drain to Elasticsearch via background workers:
+
+| Priority | Tier | Examples |
+|----------|------|----------|
+| 0 | Exemplars | Rare events, boundary crosses, new payloads |
+| 1 | Patterns | Daily aggregate with top-k payload variants |
+| 2 | Events | All events (count threshold = 1) |
+
+Each outbox row has a dedup key. Within the dedup window (default: 30 days), the same base+payload hash writes once. Workers retry with exponential backoff. Rows that exceed max retries move to a dead-letter queue and are logged to diagnostics.
+
+### Stringify JSON Values
+
+A recursive function walks every JSON value before ES indexing. Numbers and booleans become strings. Objects and arrays recurse. The result: no field in the ES mapping ever sees conflicting types across documents. A single 400 error from a type conflict stops an entire bulk request — this prevents that class of failure entirely.
+
+## Per-Platform Architecture
+
+### Windows — ETW
 
 ```mermaid
 flowchart LR
-    subgraph Input["TDH Raw Bytes"]
-        A["byte buffer from\nTdhGetProperty()"]
+    subgraph Sources
+        KERN[Kernel Providers<br/>Process/Thread/Image<br/>Network/File/Registry]
+        USER[User-mode Providers<br/>PowerShell/Defender<br/>WMI/COM/.NET/SMB]
+        FORE[Process Forensics<br/>PEB walking<br/>module enumeration<br/>TCP table snapshot]
+        BROW[Browser Artifacts<br/>Chrome/Firefox/Edge<br/>history + downloads]
+        REG[Registry Diff<br/>hive snapshots<br/>ROT-13 heuristic]
     end
 
-    subgraph Checks["Sanitization Gates"]
-        A --> C1{"all bytes == 0?"}
-        C1 -->|yes| NULL["→ Null\n(empty UNICODE_STRING,\nnot-set fields)"]
-
-        C1 -->|no| C2{"valid UTF-16LE string?"}
-        C2 -->|"yes, printable"| STR["→ String"]
-
-        C2 -->|"no, >40% CJK/PUA"| BE["Try UTF-16BE\nbyte-swap fallback"]
-        BE --> STR
-
-        C2 -->|"has letters but\ncontrol chars"| C3{"printable ratio\n>50%?"}
-        C3 -->|yes| WRAP["→ {hex, raw}\n(no ascii field\nif <70% printable)"]
-        C3 -->|no| NULL
-
-        C2 -->|"valid GUID"| GUID["→ GUID string"]
-        C2 -->|"u32/u64 number"| NUM["→ Number"]
+    subgraph Core
+        MAP[Mapping → NormalizedEvent]
+        PIPE[Pipeline<br/>tokenize → CMS → reservoir]
     end
 
-    subgraph Token["Token-Level Sanitization"]
-        STR --> T1{"sanitize_token_value()"}
-        WRAP --> T1
-        T1 -->|"AAA= / all-null base64"| REJECT1["Reject"]
-        T1 -->|"pure decimal >6 digits"| REJECT2["Reject"]
-        T1 -->|"0x... hex pointer"| REJECT3["Reject"]
-        T1 -->|"all-hex ≥16 chars"| REJECT4["Reject"]
-        T1 -->|"control chars / U+FFFD"| REJECT5["Reject"]
-        T1 -->|"valid text"| HASH["→ Token Hash"]
+    subgraph Export
+        OUT[SQLite Outbox]
+        BULK[ES Bulk Export]
     end
+
+    KERN & USER & FORE & BROW & REG --> MAP --> PIPE --> OUT --> BULK
 ```
 
----
+**Crates:**
+- `agent-core` — NormalizedEvent schema, pipeline, tokenization, CMS, reservoir, SQLite, crypto, PE parsing, process forensics, browser artifact scanner, registry snapshot diff
+- `agent-etw` — ETW session lifecycle, TDH event property resolution, kernel/user provider registry (40+ entries with GUID/flag mapping), provider discovery (200+ auto-discovered), semantic event name resolution
+- `agent-exporter` — Outbox worker, ES bulk client with gzip, retry, dead-letter, health/diagnostics workers
+- `agent-service` — Windows service wrapper (SCM), config hot-reload via file watcher, stall detection with ETW session restart recovery, embedded config mode (PE overlay trailer)
 
-## Token Construction
+**Key Windows-specific features:**
+- PEB walking for command-line extraction (NtQueryInformationProcess class 33, fallback to VM_READ)
+- PE metadata: compile timestamp, section count, import table entropy, debug/PDB path
+- PowerShell obfuscation analysis: caret escaping, base64 -enc, IEX, download cradle, string splitting
+- Registry ROT-13 heuristic for obfuscated key names
+- Browser database scanning (Chrome, Firefox, Edge history and downloads)
 
-```mermaid
-flowchart TD
-    EV["NormalizedEvent\n(clean fields only)"] --> MATCH{"event_type?"}
-
-    MATCH -->|"process_start"| PS["build_process_start_tokens()"]
-    MATCH -->|"process_end/operation"| PE["build_process_end_tokens()"]
-    MATCH -->|"network_connect"| NET["build_network_connect_tokens()"]
-    MATCH -->|"dns_query"| DNS["build_dns_query_tokens()"]
-    MATCH -->|"registry"| REG["build_registry_tokens()"]
-    MATCH -->|"image_load/unload"| IMG["build_image_load_tokens()"]
-    MATCH -->|"file"| FILE["build_file_tokens()"]
-    MATCH -->|"wmi"| WMI["build_wmi_tokens()"]
-    MATCH -->|"thread_*"| THR["build_thread_tokens()"]
-    MATCH -->|"antimalware"| AM["build_antimalware_tokens()"]
-    MATCH -->|"com_classic"| COM["build_com_classic_tokens()"]
-    MATCH -->|"rpcss/capi2/schannel"| RPC["build_rpcss/capi2/schannel_tokens()"]
-    MATCH -->|"win32k/ntfs/..."| SPEC["build_win32k/ntfs/etc_tokens()"]
-    MATCH -->|"other"| GEN["build_generic_tokens()"]
-
-    PS --> BASE["proc_base()\nimage_name, directory_class,\nsignature_bucket, hashes,\nparent image chain"]
-    PE --> BASE
-    NET --> BASE
-    DNS --> BASE
-    REG --> BASE
-    IMG --> BASE
-    FILE --> BASE
-    WMI --> BASE
-    THR --> BASE
-    AM --> BASE
-    COM --> BASE
-    RPC --> BASE
-    SPEC --> BASE
-    GEN --> BASE
-
-    BASE --> HASH1["SHA-256 → base_hash\n'What behavior happened?'"]
-    BASE --> PAYLOAD["+ variable fields\n(command_line, specific IPs,\nvalues, SID, timestamps)"]
-    PAYLOAD --> HASH2["SHA-256 → payload_hash\n'What were the exact details?'"]
-
-    HASH1 --> TOKEN["TokenPair { base_hash, payload_hash,\nbase_canonical_json, payload_canonical_json }"]
-    HASH2 --> TOKEN
-```
-
----
-
-## Database Schema
-
-```mermaid
-erDiagram
-    BASE_TOKENS {
-        blob base_hash PK "32-byte SHA-256"
-        text event_type "process_start, dns_query, etc."
-        text provider "ETW provider name"
-        int event_id
-        int total_count "Total observations"
-        real decay_score "Decay-weighted frequency"
-        text rarity_band "Rare, Uncommon, Common"
-        blob base_canonical "Deterministic JSON"
-        blob provider_props "Provider-specific metadata"
-        int first_seen_unix
-        int last_seen_unix
-    }
-
-    PAYLOAD_VARIANTS {
-        blob payload_hash PK "32-byte SHA-256"
-        blob base_hash FK "Links to BASE_TOKENS"
-        blob payload_canonical "Variable-detail JSON"
-        int exact_count "Exact observation count"
-        real decay_score
-        int promoted_at_unix
-    }
-
-    OUTBOX {
-        int id PK
-        int priority "0=exemplar, 1=pattern, 2=event, 3=diagnostic"
-        text dedup_key "Unique per document"
-        blob document "JSON document bytes"
-        int created_at_unix
-        int sent "0=pending, 1=sent"
-        int attempts "Retry count"
-    }
-
-    LOGWELL {
-        int id PK
-        text level "error, warn, info"
-        text component "export, pipeline, etw, agent"
-        text message
-        text details
-        int created_at_unix
-    }
-
-    EXPORT_STATE {
-        blob base_hash PK
-        int last_exemplar_unix
-        blob last_exemplar_payload
-        int last_pattern_unix
-        text pattern_rarity_band
-    }
-
-    BASE_TOKENS ||--o{ PAYLOAD_VARIANTS : "has variants"
-    BASE_TOKENS ||--o| EXPORT_STATE : "tracks export"
-```
-
----
-
-## Concurrency Model
+### Linux — eBPF Adaptive Ladder
 
 ```mermaid
 flowchart TB
-    subgraph MainThread["Main Thread"]
-        SVC["Windows Service / CLI run"]
-        ETW["ETW Session Start"]
-        EXP["Exporter Worker (tokio)"]
-        CFG["Config Reload Watcher"]
-    end
+    PROBE[System Probe<br/>~50ms at startup]
+    PROBE --> TIER{Select Best Tier}
 
-    subgraph Callback["ETW Callback Thread (high frequency)"]
-        CB["ProcessTrace callback"]
-        TDH["TDH parse + sanitize"]
-        MAP["map_event() → NormalizedEvent"]
-        SEND["sender.send(event)"]
-    end
+    TIER -->|"Kernel 5.4+<br/>BTF present<br/>CAP_BPF"| CORE[eBPF CO-RE<br/>12 probes<br/>lowest overhead]
+    TIER -->|"Kernel 4.x<br/>no BTF<br/>eBPF available"| LEGACY[eBPF Legacy<br/>precompiled .o<br/>known kernels]
+    TIER -->|"Kernel 3.x+<br/>no eBPF"| AUDIT[auditd + fanotify<br/>process/security<br/>file events]
+    TIER -->|"Kernel 2.6.x+"| NETLINK[netlink + inotify<br/>cn_proc<br/>per-dir watches]
+    TIER -->|"Any kernel<br/>container<br/>no privileges"| POLL[/proc Polling<br/>1s resolution<br/>universal fallback]
 
-    subgraph Pipeline["Pipeline Thread"]
-        RECV["receiver.recv()"]
-        ENRICH["compute_enrichments()"]
-        TOK["build_tokens()"]
-        SHARD["pick_shard(hash[..8])"]
-    end
-
-    subgraph Shards["8 Baselining Shards (independent locks)"]
-        S0["Shard 0: CMS + Reservoir + DB"]
-        S1["Shard 1: CMS + Reservoir + DB"]
-        S2["Shard 2: CMS + Reservoir + DB"]
-        S3["Shard 3: CMS + Reservoir + DB"]
-        S4["Shard 4: CMS + Reservoir + DB"]
-        S5["Shard 5: CMS + Reservoir + DB"]
-        S6["Shard 6: CMS + Reservoir + DB"]
-        S7["Shard 7: CMS + Reservoir + DB"]
-    end
-
-    CB --> TDH --> MAP --> SEND
-    SEND --> RECV --> ENRICH --> TOK --> SHARD
-    SHARD --> S0
-    SHARD --> S1
-    SHARD --> S2
-    SHARD --> S3
-    SHARD --> S4
-    SHARD --> S5
-    SHARD --> S6
-    SHARD --> S7
+    CORE & LEGACY & AUDIT & NETLINK & POLL --> MAP[NormalizedEvent]
+    MAP --> PIPE[Pipeline → Outbox → ES]
 ```
 
-**Key decisions:**
-- `parking_lot::Mutex` everywhere — no async locks in the hot path
-- 8 shards → 8 independent locks → minimal contention
-- Shared caches (process identity, enrichment state) are locked briefly for read/write then released
-- SQLite WAL mode handles concurrent readers + single writer
+**Crates:**
+- `agent-core-linux` — NormalizedEvent schema, pipeline, tokenization, ELF metadata parsing, host identity via /etc/machine-id
+- `agent-ebpf` — SystemProfile probe (kernel, BTF, eBPF, auditd, fanotify, container, init system, security module, capabilities), 5-tier TelemetrySource trait, 12 eBPF CO-RE probes, auditd netlink + log tail coexistence, fanotify whole-filesystem monitor, /proc polling with TCP connection diffing
+- `agent-exporter-linux` — ES bulk export (platform-agnostic)
+- `agent-service-linux` — CLI, systemd/OpenRC/sysvinit/runit service install and detection
 
----
+**Capability ladder (auto-selected at startup, ~50ms probe):**
 
-## Security Model
+| Tier | Requirements | Event Sources |
+|------|-------------|---------------|
+| eBPF CO-RE | Kernel 5.4+, BTF, CAP_BPF | 12 probes: exec, exit, fork, execve, tcp_connect, tcp_accept, dns, file_open, file_write, file_delete, module_load, capability, mount |
+| auditd + fanotify | Kernel 3.x+ | Process/security via netlink, file events via fanotify |
+| netlink + inotify | Kernel 2.6.x+ | Process events via cn_proc, file events per-directory |
+| /proc polling | Any kernel | Process table diff, TCP connection table parse, 1-second resolution |
 
-```mermaid
-flowchart TD
-    BOOT["Machine Boot / First Run"] --> GEN["Generate master_key\n(256-bit random)"]
-    GEN --> DPAPI["DPAPI::Protect(LocalMachine, master_key)"]
-    DPAPI --> DISK["Write to state_dir/master_key.bin"]
+**12 eBPF probes:**
 
-    DISK --> DERIVE["On restart: DPAPI::Unprotect → master_key"]
-    DERIVE --> HKDF["HKDF-SHA256 derive purpose keys:"]
-    HKDF --> K1["outbox_key = HKDF(master, 'outbox', 'agent.db')"]
-    HKDF --> K2["patterns_key = HKDF(master, 'patterns', 'agent.db')"]
-    HKDF --> K3["events_key = HKDF(master, 'events', 'agent.db')"]
+| Probe | Tracepoint/kprobe | Event Type |
+|-------|-------------------|------------|
+| `trace_exec` | sched:sched_process_exec | process_start |
+| `trace_exit` | sched:sched_process_exit | process_end |
+| `trace_fork` | sched:sched_process_fork | process_fork |
+| `trace_execve` | syscalls:sys_enter_execve | process_start (with argv) |
+| `trace_tcp_connect` | kprobe:tcp_v4_connect | network_connect |
+| `trace_tcp_accept` | kprobe:inet_csk_accept | network_accept |
+| `trace_dns_query` | kprobe:udp_sendmsg (port 53 filter) | dns_query |
+| `trace_file_open` | syscalls:sys_enter_openat | file_open |
+| `trace_file_write` | syscalls:sys_enter_write | file_write |
+| `trace_file_delete` | syscalls:sys_enter_unlinkat | file_delete |
+| `trace_module_load` | module:module_load | module_load |
+| `trace_mount` | syscalls:sys_enter_mount | mount |
+| `trace_capability` | kprobe:cap_capable | capability_check (non-root only) |
 
-    K1 --> ENC["AES-256-GCM encrypt\nsensitive DB fields before write"]
-    K2 --> ENC
-    K3 --> ENC
-```
-
----
-
-## Config Defaults
-
-The agent ships with **maximum data collection** defaults:
-
-| Setting | Default | Notes |
-|---------|---------|-------|
-| Provider mode | `all` | Auto-discovers every registered ETW provider |
-| Allow raw fields | `false` | Raw TDH properties excluded from ES documents |
-| Gzip | `true` | Compress _bulk requests |
-| Decay half-life | 30 days | Recency weighting for rarity scoring |
-| Reservoir size | 3 per base token | Exemplar samples retained |
-| Shard count | 8 | Independent baselining pipelines |
-| Process cache size | 2,000 | PID → identity lookups |
-| Promoted payload cache | 100,000 | Exact counting threshold |
-
----
-
-## Deployment Scale
+### Firewall — Multi-Source Collector
 
 ```mermaid
 flowchart TB
-    subgraph Single["Single Host — Standalone"]
-        S1["agent.exe run"] --> S2["Local SQLite\nWAL mode"]
-        S2 --> S3["Local ES export"]
+    subgraph OnDevice["On-Device Sources"]
+        NFT[nftables<br/>nflog netlink<br/>conntrack events]
+        IPT[iptables<br/>kern.log tail<br/>ulogd]
+        PF[pf<br/>pflog0 reader<br/>filter.log]
     end
 
-    subgraph Fleet["Fleet — 1,000+ Endpoints"]
-        F1["Endpoint 1\nagent.exe (service)"] --> ES["Elasticsearch\nCluster"]
-        F2["Endpoint 2\nagent.exe (service)"] --> ES
-        F3["Endpoint N\nagent.exe (service)"] --> ES
-        ES --> KIBANA["Kibana\nDashboards + Alerting"]
-        ES --> ML["ML Pipeline\nLLM Fine-tuning\nAnomaly Detection"]
+    subgraph Collector["Collector Sources"]
+        SYSLOG[syslog UDP 514<br/>RFC 3164 / 5424]
+        VENDOR[18 Vendor Parsers<br/>Cisco ASA • Palo Alto • Fortinet<br/>Juniper • SonicWall • Sophos<br/>Check Point • WatchGuard • more]
+        REST[REST API Pollers<br/>Palo Alto Panorama<br/>Fortinet FortiGate<br/>Cisco FMC<br/>Check Point]
+        FLOW[Cloud Flow Logs<br/>AWS VPC • Azure NSG<br/>GCP Firewall]
     end
 
-    Single -.->|"Same binary\nSame config format\nSame token determinism"| Fleet
+    subgraph Enrich["Enrichment"]
+        GEO[GeoIP / ASN<br/>MaxMind GeoLite2]
+    end
+
+    NFT & IPT & PF --> FW[FirewallEvent Schema]
+    SYSLOG --> VENDOR --> FW
+    REST & FLOW --> FW
+    GEO --> FW
+    FW --> PIPE[Pipeline → Outbox → ES]
 ```
 
-**Scaling properties:**
+**Crates:**
+- `agent-core-firewall` — FirewallEvent schema (connection 5-tuple, NAT translation, rule identity, threat/IPS, application/user, session bytes), config, GeoIP enrichment
+- `agent-nftables` — nflog netlink reader (multicast groups), conntrack event reader (NEW/UPDATE/DESTROY), netfilter attribute parser
+- `agent-iptables` — kern.log/syslog/ulogd tail, iptables LOG format parser (IN=/OUT=/SRC=/DST=/PROTO=/SPT=/DPT=)
+- `agent-pf` — /dev/pflog0 reader (binary pfloghdr), filter.log text parser for pfSense/OPNsense
+- `agent-syslog` — UDP 514 listener (RFC 3164/5424), 18 vendor auto-detection patterns, per-vendor parsers
+- `agent-api` — REST API pollers (Palo Alto Panorama, Fortinet FortiGate, Cisco FMC, Check Point)
+- `agent-cloud` — VPC Flow Logs (AWS S3/CloudWatch), NSG Flow Logs (Azure Blob), Firewall Rules Logging (GCP Cloud Logging)
+- `agent-exporter-firewall` — ES bulk export
+- `agent-service-firewall` — CLI, 3 operating modes (on-device, collector, hybrid), systemd/OpenRC/sysvinit/runit install
 
-| Property | Value | Why |
-|----------|-------|-----|
-| **Per-host CPU** | ~2–5% of one core | Single-threaded pipeline, ETW callback is kernel-mode |
-| **Per-host RAM** | ~50–150 MB | Process cache (2K entries), CMS sketches (fixed size), SQLite page cache |
-| **Per-host disk I/O** | ~5–20 MB/hour writes | SQLite WAL + log rotation, compressed tokens |
-| **Network to ES** | ~1–10 MB/hour | gzip bulk export, deduplication before send |
-| **Cross-host determinism** | Guaranteed | SID/IP normalization → identical `tokens.stable` regardless of host |
-| **ES cluster load** | O(unique behaviors) not O(total events) | Dedup at edge before ES ingestion |
-| **1,000 hosts → ES** | ~1–10 GB/hour ingest | Depends on behavioral diversity, not event volume |
-
-**Why this scales:** Each endpoint does the expensive work locally — sanitization, tokenization, baselining, deduplication. ES only sees pre-digested documents. A 1,000-endpoint fleet sends roughly the same ES ingest volume as ~5–10 endpoints running raw log forwarding.
-
----
-
-## Competitive Differentiation
+### Cloud — Multi-Provider API Polling
 
 ```mermaid
-flowchart LR
-    subgraph Traditional["Traditional SIEM / Log Forwarding"]
-        T1["Windows Event Log\nForwarding"] --> T2["SIEM Collector\n(beats, nxlog, winlogbeat)"]
-        T2 --> T3["SIEM Indexer\nElastic, Splunk"]
-        T3 --> T4["Analyst\n'What happened?'"]
+flowchart TB
+    subgraph AWS["AWS (9 services)"]
+        CT[CloudTrail]
+        VPC[VPC Flow Logs]
+        GD[GuardDuty]
+        SH[Security Hub]
+        S3[S3 Access]
+        WAF[WAF Logs]
+        R53[Route53]
+        ELB[ELB Logs]
+        CFG[Config Rules]
     end
 
-    subgraph LH["LongHorizons"]
-        L1["ETW Kernel Traces\n200+ providers"] --> L2["Edge Compute\nSanitize → Tokenize → Baseline"]
-        L2 --> L3["ES: Unique behaviors only\nDedup before ingest"]
-        L3 --> L4["Analyst\n'Has this ever happened before?'"]
+    subgraph Azure["Azure (6 services)"]
+        AL[Activity Log]
+        NSG[NSG Flow Logs]
+        SEN[Sentinel]
+        AD[AD Sign-in]
+        KV[Key Vault]
+        AP[Azure Policy]
     end
 
-    T4 -.->|"Hours of searching"| T4
-    L4 -.->|"Instant answer"| L4
+    subgraph GCP["GCP (5 services)"]
+        CAL[Cloud Audit Logs]
+        VPC2[VPC Flow Logs]
+        SCC[Security Command Center]
+        CL[Cloud Logging]
+        AT[Access Transparency]
+    end
+
+    subgraph Oracle["Oracle (4 services)"]
+        OCI_A[Audit Logs]
+        VCN[VCN Flow Logs]
+        CG[Cloud Guard]
+        EVT[Events]
+    end
+
+    subgraph K8S["Kubernetes (4 services)"]
+        KAL[Audit Logs]
+        PS[Pod Security]
+        ADM[Admission Reviews]
+        NP[Network Policies]
+    end
+
+    CT & VPC & GD & SH & S3 & WAF & R53 & ELB & CFG --> CE[CloudEvent Schema]
+    AL & NSG & SEN & AD & KV & AP --> CE
+    CAL & VPC2 & SCC & CL & AT --> CE
+    OCI_A & VCN & CG & EVT --> CE
+    KAL & PS & ADM & NP --> CE
+    CE --> PIPE[Pipeline → Outbox → ES]
 ```
 
-| Dimension | Traditional SIEM | LongHorizons |
-|-----------|-----------------|--------------|
-| **Data source** | Windows Event Log (handful of channels) | ETW kernel + user-mode traces (200+ providers) |
-| **Coverage** | Security (4624/4688), System, Application | Process, thread, network, file, registry, memory, DNS, WMI, Defender, PowerShell, Schannel, RPC, COM, CAPI2, AppLocker, Hyper-V... |
-| **Storage model** | Store every event | Store unique behaviors, count duplicates |
-| **Behavioral identity** | None — join on unstructured text | Deterministic `tokens.stable` hash |
-| **Novelty detection** | Manual hunting | Pre-computed rarity band per event |
-| **Cross-host correlation** | Regex/string match on hostname + path | Term query on `tokens.stable` across entire fleet |
-| **ML pipeline readiness** | 60–80% of project time = data engineering | Zero preprocessing required |
-| **Kernel visibility** | None (Event Log is user-mode) | Full kernel trace: thread scheduling, memory ops, IRPs, DPCs |
+**CloudEvent schema fields:**
 
----
+| Category | Fields |
+|----------|--------|
+| Actor | principal ARN/ObjectID, type (IAMUser/AssumedRole/ServiceAccount/ManagedIdentity), access key, MFA, source IP, user agent, invoked by |
+| Resource | ARN/URI, type, name, region, account/subscription/project, zone, tags |
+| Network | 5-tuple, VPC/subnet, security group, direction, ACCEPT/REJECT, bytes, packets |
+| API | service, action, category (Read/Write/Management/Data), status, error code, request ID |
+| Authorization | Allow/Deny/ImplicitDeny, policy name/ID, permissions used, permissions missing, condition keys |
+| Threat | finding ID, type, severity (0.0–10.0), title, description, MITRE ATT&CK tactic/technique, indicator type/value, compromised resource |
+| Compliance | framework (CIS/PCI/HIPAA/SOC2/NIST), control ID, status, remediation |
+| IP Context | is_aws_service, is_azure_service, is_gcp_service, TOR exit node, anonymous proxy, GeoIP country/city/ASN |
 
-*Document updated 2026-05-31 — Added deployment scale, competitive differentiation, throughput analysis; corrected event type count (49), removed stale semantic_mode config field*
+**Per-provider coverage:**
+
+| Provider | Services |
+|----------|----------|
+| AWS (9) | CloudTrail, VPC Flow Logs, GuardDuty, Security Hub, S3 Access Logs, WAF Logs, Route53 Resolver, ELB Access Logs, AWS Config Rules |
+| Azure (6) | Activity Log, NSG Flow Logs, Sentinel Alerts, AD Sign-in Logs, Key Vault Logs, Azure Policy |
+| GCP (5) | Cloud Audit Logs (Admin + Data Access), VPC Flow Logs, Security Command Center, Cloud Logging, Access Transparency |
+| Oracle (4) | OCI Audit Logs, VCN Flow Logs, Cloud Guard, Events Service |
+| Kubernetes (4) | API Server Audit Logs, Pod Security Contexts, Admission Reviews, Network Policy Events |
+
+**Crates:**
+- `agent-core-cloud` — CloudEvent schema, config, tokenization, pipeline
+- `agent-aws` — 9 service pollers with AWS SDK credential chain (env → instance profile → ~/.aws/credentials)
+- `agent-azure` — 6 service pollers with DefaultAzureCredential (env → managed identity → CLI)
+- `agent-gcp` — 5 service pollers with service account key / Application Default Credentials
+- `agent-oracle` — 4 service pollers with API signing key + fingerprint
+- `agent-k8s` — 4 service pollers with in-cluster ServiceAccount or kubeconfig
+- `agent-exporter-cloud` — ES bulk export
+- `agent-service-cloud` — Unified CLI, runs all configured providers concurrently
+
+## Repository Structure
+
+```mermaid
+graph TB
+    subgraph Repo["windows-telemetry-agent"]
+        subgraph W["windows/"]
+            WC[agent-core]
+            WE[agent-etw]
+            WX[agent-exporter]
+            WS[agent-service]
+            WW[wizard]
+        end
+        subgraph L["linux/"]
+            LC[agent-core-linux]
+            LE[agent-ebpf]
+            LX[agent-exporter-linux]
+            LS[agent-service-linux]
+            LW[wizard]
+            BP[ebpf-probes]
+        end
+        subgraph F["firewall/"]
+            FC[agent-core-firewall]
+            FN[agent-nftables]
+            FI[agent-iptables]
+            FP[agent-pf]
+            FS[agent-syslog]
+            FA[agent-api]
+            FL[agent-cloud]
+            FX[agent-exporter-firewall]
+            FV[agent-service-firewall]
+            FW[wizard-firewall]
+        end
+        subgraph C["cloud/"]
+            CC[agent-core-cloud]
+            CX[agent-exporter-cloud]
+            CS[agent-service-cloud]
+            CA[AWS agent + wizard]
+            CZ[Azure agent + wizard]
+            CG[GCP agent + wizard]
+            CO[Oracle agent + wizard]
+            CK[K8s agent + wizard]
+        end
+    end
+
+    W -.->|"4 crates<br/>76 .rs files"| W
+    L -.->|"4 crates<br/>39 .rs files<br/>5 BPF C probes"| L
+    F -.->|"10 crates<br/>40 .rs files"| F
+    C -.->|"12 crates<br/>28 .rs files"| C
+```
+
+Each platform is a self-contained Cargo workspace. Path dependencies stay within the workspace. No crate is shared across platforms — the schema and pipeline are re-implemented per platform in the idioms of that platform's telemetry source. This sacrifices DRY for isolation: a breaking change in the Linux eBPF loader cannot affect the Windows ETW session manager.
+
+## Extending to New Platforms
+
+A new platform requires:
+
+1. **A `TelemetrySource` trait implementation** (or equivalent) that produces platform events into a crossbeam channel
+2. **A mapping layer** converting raw platform events → the normalized schema
+3. **A config section** for platform-specific settings (with serde defaults so minimal config works)
+4. **A wizard binary** for install/uninstall/update (`wizard install config.toml` pattern)
+5. **Deploy artifacts** — systemd unit (or equivalent), init scripts, example config
+
+Platforms that map naturally to this model:
+- **macOS** — EndpointSecurity framework (ESF) + unified logging
+- **Android** — SELinux audit + binder transactions + logcat
+- **iOS** — MDM logs + network extension framework
+- **OT/IoT** — Modbus, BACnet, MQTT protocol monitoring
+- **SaaS** — Office 365 Management API, Salesforce Event Monitoring, GitHub Audit Log
