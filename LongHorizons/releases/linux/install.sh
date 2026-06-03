@@ -22,7 +22,7 @@ fi
 # Check binary
 if [ ! -f "./$BIN" ]; then
     echo "  [!] $BIN not found in current directory."
-    echo "      Build first: cargo build --release --target x86_64-unknown-linux-musl"
+    echo "      Download the pre-built binary from LongHorizons/releases/linux/"
     exit 1
 fi
 

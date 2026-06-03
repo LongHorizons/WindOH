@@ -86,16 +86,3 @@ CloudEvent
 ./wizard-k8s init
 ./wizard-k8s install config-k8s.toml
 ```
-
-## Source Layout
-```
-cloud/
-├── agent-core-cloud/        # Shared models, config, pipeline
-├── agent-exporter-cloud/    # Shared ES bulk export
-├── agent-service-cloud/     # Shared CLI, run loop
-├── aws/                     # AWS: agent, wizard, deploy
-├── azure/                   # Azure: agent, wizard, deploy
-├── gcp/                     # GCP: agent, wizard, deploy
-├── oracle/                  # Oracle: agent, wizard, deploy
-└── kubernetes/              # K8s: agent, wizard, deploy
-```

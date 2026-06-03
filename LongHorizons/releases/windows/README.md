@@ -16,13 +16,6 @@ ETW-based kernel and userspace telemetry collector for Windows 10/11 and Windows
 - Windows service wrapper with stall detection and auto-recovery
 - Embedded config mode (PE overlay trailer)
 
-## Build
-```powershell
-cd windows
-cargo build --release
-# Output: target/release/agent.exe
-```
-
 ## Install
 ```powershell
 # Using wizard (recommended)
@@ -42,13 +35,3 @@ See `config.example.toml` for full annotated configuration.
 - Windows 10/11 or Windows Server 2016+
 - Administrator privileges (for ETW session creation)
 - Elasticsearch 7.x or 8.x
-
-## Source Layout
-```
-windows/
-├── agent-core/       # Models, pipeline, tokenization, DB, crypto
-├── agent-etw/        # ETW session management, TDH parsing
-├── agent-exporter/   # Outbox worker, ES bulk export
-├── agent-service/    # Windows service wrapper
-└── wizard/           # Install/uninstall/update wizard
-```

@@ -24,14 +24,6 @@ Adaptive firewall log collector — run ON the firewall or as a centralized coll
 - **3 operating modes**: on-device (runs on firewall), collector (syslog + API), hybrid (both)
 - Systemd, OpenRC, sysvinit, runit service support
 
-## Build
-```bash
-cd firewall
-cargo build --release
-# Output: target/release/firewall-agent
-# Wizard: target/release/wizard-firewall
-```
-
 ## Install
 ```bash
 # Generate config
@@ -54,20 +46,4 @@ sudo ./firewall-agent probe
 [sources.cloud_pollers] AWS, Azure, GCP
 [enrichment]   GeoIP, ASN, AbuseIPDB, VirusTotal
 [export]       Elasticsearch events + diagnostics + health
-```
-
-## Source Layout
-```
-firewall/
-├── agent-core-firewall/      # Models, config, tokenization, pipeline
-├── agent-nftables/           # nflog + conntrack (modern Linux)
-├── agent-iptables/           # iptables log tail (legacy)
-├── agent-pf/                 # pf pflog (FreeBSD/pfSense)
-├── agent-syslog/             # Universal syslog receiver + 18 vendor parsers
-├── agent-api/                # REST API pollers (Palo Alto, Fortinet, etc.)
-├── agent-cloud/              # Cloud flow log pollers (AWS, Azure, GCP)
-├── agent-exporter-firewall/  # ES bulk export
-├── agent-service-firewall/   # CLI, run loop, install
-├── wizard-firewall/          # Installer wizard
-└── deploy/                   # systemd unit, init scripts, config example
 ```

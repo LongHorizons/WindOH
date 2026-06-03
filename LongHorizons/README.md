@@ -36,43 +36,44 @@ The result: every event from every platform is queryable through the same Kibana
 
 ## Quick Start
 
+Download the pre-built release for your platform from the [releases](releases/) directory.
+
 ```powershell
 # Windows
-cd windows; cargo build --release; .\wizard.exe install config.toml
+.\wizard.exe install config.toml     # Fresh install
+.\wizard.exe config.toml             # Smart mode (detect existing → update or install)
 ```
 
 ```bash
 # Linux (musl static — one binary, every distro)
-cd linux; make -C ebpf-probes; cargo build --release --target x86_64-unknown-linux-musl
 sudo ./wizard install config.toml
 ```
 
 ```bash
 # Firewall (on-device or collector mode)
-cd firewall; cargo build --release
-sudo ./wizard-firewall init --agent-id fw01; sudo ./wizard-firewall install config.toml
+sudo ./wizard-firewall init --agent-id fw01
+sudo ./wizard-firewall install config.toml
 ```
 
 ```bash
 # Cloud (per-provider wizards)
-cd cloud; cargo build --release
-./wizard-aws init --region us-east-1; ./wizard-aws install config-aws.toml
+./wizard-aws init --region us-east-1
+./wizard-aws install config-aws.toml
 ```
 
-## Repository
+## Releases
 
 ```
-├── windows/       ETW host agent — 4 crates, 76 source files
-├── linux/         eBPF host agent — 4 crates, 39 source files, 5 BPF C probes
-├── firewall/      Firewall agent — 10 crates, 40 source files
-├── cloud/         Cloud agent — 5 providers, 12 crates, 28 source files
-└── Presentation/  Documentation and per-platform release packages
+releases/
+├── windows/     Pre-built wizard.exe + install.ps1 + config.toml
+├── linux/       Pre-built telemetry-agent + install.sh
+├── firewall/    Pre-built firewall-agent + wizard-firewall + install.sh
+└── cloud/       Pre-built per-provider agents + wizards + install.sh
 ```
 
-Each platform is a fully independent Cargo workspace. No shared code, no cross-contamination. Build one without building the others.
+Each platform is a fully independent agent. Deploy one without deploying the others. Full per-platform architecture and crate layout in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Requirements
 
-- Rust 1.75+
 - Elasticsearch 7.x or 8.x
 - Platform: Windows 10+ / Linux kernel 2.6+ / CAP_NET_RAW (firewall) / cloud credentials (cloud)
