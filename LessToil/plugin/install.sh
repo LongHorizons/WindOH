@@ -24,6 +24,118 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 set -euo pipefail
 
+# =============================================================================
+# Dependency helper functions (Debian/Ubuntu self-healing)
+# =============================================================================
+
+is_debian_family() {
+    command -v apt-get &>/dev/null
+}
+
+prompt_install_package() {
+    local pkg="$1"
+    if dpkg -s "$pkg" &>/dev/null; then
+        return 0
+    fi
+    if [ "$ACCEPT" = true ]; then
+        echo "      Installing ${pkg} (--accept mode)..."
+        sudo apt-get update -qq
+        sudo apt-get install -y "$pkg"
+        return 0
+    fi
+    echo ""
+    echo "      Missing requirement detected:"
+    echo "        ${pkg}"
+    echo ""
+    printf "      Install %s now? [Y/n] " "$pkg"
+    read -r REPLY
+    if [ "${REPLY:-}" = "n" ] || [ "${REPLY:-}" = "N" ]; then
+        echo ""
+        echo "      ${pkg} is required to continue. Please install it manually:"
+        echo "        sudo apt-get install ${pkg}"
+        echo ""
+        exit 1
+    fi
+    sudo apt-get update -qq
+    sudo apt-get install -y "$pkg" || {
+        echo "      ERROR: Failed to install ${pkg}"
+        exit 1
+    }
+}
+
+ensure_git() {
+    if command -v git &>/dev/null; then
+        return 0
+    fi
+    echo ""
+    echo "      Git is required to fetch the plugin."
+    if is_debian_family; then
+        prompt_install_package "git"
+    else
+        echo ""
+        echo "      Please install git and re-run:"
+        echo "        https://git-scm.com/downloads"
+        echo ""
+        exit 1
+    fi
+}
+
+ensure_pip_available() {
+    local python_path="$1"
+    if "$python_path" -m pip --version &>/dev/null; then
+        return 0
+    fi
+    echo ""
+    echo "      Virtual environment created successfully,"
+    echo "      but pip is unavailable inside the environment."
+    echo ""
+    if is_debian_family; then
+        local py_ver
+        py_ver=$("$python_path" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+        if [ -n "$py_ver" ]; then
+            echo "      Missing requirement detected:"
+            echo "        python${py_ver}-full"
+            echo "        python3-pip"
+            echo ""
+            prompt_install_package "python${py_ver}-full"
+            prompt_install_package "python3-pip"
+        else
+            prompt_install_package "python3-full"
+            prompt_install_package "python3-pip"
+        fi
+    else
+        echo "      Please ensure pip is available for your Python installation."
+        echo "      On Debian/Ubuntu: sudo apt-get install python3-pip python3-full"
+        echo "      On Fedora/RHEL:   sudo dnf install python3-pip"
+        echo "      On macOS:         pip is included with python.org and Homebrew Python"
+        exit 1
+    fi
+    # Re-test after attempted repair
+    if "$python_path" -m pip --version &>/dev/null; then
+        echo "      pip is now available."
+    else
+        echo ""
+        echo "      ERROR: pip is still unavailable after attempting repair."
+        echo "      Cannot continue without pip for package installation."
+        echo ""
+        exit 1
+    fi
+}
+
+ensure_venv_requirements() {
+    if ! is_debian_family; then
+        return 0
+    fi
+    local py_ver
+    py_ver=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+    if [ -z "$py_ver" ]; then
+        return 0
+    fi
+    prompt_install_package "python${py_ver}-venv"
+    prompt_install_package "python${py_ver}-full"
+    prompt_install_package "python3-pip"
+}
+
 PLUGIN_NAME="less-toil"
 PLUGIN_DIR="${HOME}/.claude/plugins/${PLUGIN_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -132,7 +244,7 @@ if [ -z "$PYTHON" ] && [ "$ACCEPT" = true ]; then
     if command -v apt-get &>/dev/null; then
         echo "      Detected apt-get -- installing python3, pip, venv..."
         sudo apt-get update -qq 2>&1 | tail -1
-        sudo apt-get install -y -qq python3 python3-pip python3-venv 2>&1 | tail -3 || true
+        sudo apt-get install -y -qq python3 python3-pip python3-venv python3-full 2>&1 | tail -3 || true
     elif command -v brew &>/dev/null; then
         echo "      Detected Homebrew -- installing python@3.12..."
         brew install python@3.12 2>&1 | tail -3 || true
@@ -202,6 +314,10 @@ echo "      Resolved Python: $PYTHON ($("$PYTHON" --version 2>&1))"
 # All Python references from here onward use INSTALL_PYTHON (may be venv or system)
 INSTALL_PYTHON="$PYTHON"
 
+# Validate system dependencies before venv creation
+ensure_git
+ensure_venv_requirements
+
 # --- Create shared venv -----------------------------------------------------
 VENV_DIR="${HOME}/.claude/venv"
 if [ "$NO_VENV" = false ]; then
@@ -227,7 +343,8 @@ if [ "$NO_VENV" = false ]; then
         fi
     fi
     if [ "$NO_VENV" = false ]; then
-        "$VENV_PYTHON" -m pip install --quiet --upgrade pip 2>/dev/null || true
+        ensure_pip_available "$VENV_PYTHON"
+        "$VENV_PYTHON" -m pip install --quiet --upgrade pip setuptools wheel
         echo "      Venv ready: $VENV_PYTHON"
     fi
 fi
@@ -469,6 +586,9 @@ echo ""
 # =============================================================================
 # STEP 3: Install Python dependencies
 # =============================================================================
+# Final pre-flight: abort if pip is still unavailable
+ensure_pip_available "$INSTALL_PYTHON"
+
 echo "[3/8] Installing Python dependencies..."
 
 # Core dependencies (required)
