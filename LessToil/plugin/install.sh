@@ -554,33 +554,68 @@ echo ""
 if [ -f "${PLUGIN_DIR}/hooks/hooks.json" ]; then
     PYTHON_ABS="$(command -v "$INSTALL_PYTHON" 2>/dev/null || echo "$INSTALL_PYTHON")"
     TEMP_HOOKS="$(mktemp)"
-    sed "s|\"python \"|\"${PYTHON_ABS} \"|g" "${PLUGIN_DIR}/hooks/hooks.json" > "$TEMP_HOOKS"
+    sed "s|\"python3 \"|\"${PYTHON_ABS} \"|g" "${PLUGIN_DIR}/hooks/hooks.json" > "$TEMP_HOOKS"
     mv "$TEMP_HOOKS" "${PLUGIN_DIR}/hooks/hooks.json"
     echo "      hooks.json: using $PYTHON_ABS"
 fi
 
 # =============================================================================
-# STEP 2: Register plugin in Claude Code settings
+# STEP 2: Register plugin and hooks in Claude Code settings
 # =============================================================================
-echo "[2/8] Enabling plugin in Claude Code settings..."
+echo "[2/8] Registering hooks in Claude Code settings..."
 SETTINGS_FILE="${HOME}/.claude/settings.json"
-if [ ! -f "$SETTINGS_FILE" ]; then
-    echo '{"enabledPlugins":{"less-toil":true}}' > "$SETTINGS_FILE"
-    echo "      Created settings.json with less-toil enabled"
-else
-    "$INSTALL_PYTHON" -c "
+PYTHON_ABS="$(command -v "$INSTALL_PYTHON" 2>/dev/null || echo "$INSTALL_PYTHON")"
+
+"$INSTALL_PYTHON" -c "
 import json, os
-path = os.path.expanduser('$SETTINGS_FILE')
-with open(path, 'r') as f:
-    cfg = json.load(f)
+
+plugindir = os.path.expanduser('${PLUGIN_DIR}')
+python_abs = '${PYTHON_ABS}'
+settings_path = os.path.expanduser('${SETTINGS_FILE}')
+
+# Load existing or create new
+if os.path.exists(settings_path):
+    with open(settings_path, 'r') as f:
+        cfg = json.load(f)
+else:
+    cfg = {}
+
+# env: set CLAUDE_PLUGIN_ROOT so hook scripts can import core/
+if 'env' not in cfg:
+    cfg['env'] = {}
+cfg['env']['CLAUDE_PLUGIN_ROOT'] = plugindir
+
+# hooks: PreToolUse + PostToolUse on Write|Edit|MultiEdit with absolute paths
+if 'hooks' not in cfg:
+    cfg['hooks'] = {}
+
+cfg['hooks']['PreToolUse'] = [{
+    'matcher': 'Write|Edit|MultiEdit',
+    'hooks': [{
+        'type': 'command',
+        'command': f'{python_abs} {plugindir}/hooks/pre_tool_use.py',
+        'timeout': 45
+    }]
+}]
+cfg['hooks']['PostToolUse'] = [{
+    'matcher': 'Write|Edit|MultiEdit',
+    'hooks': [{
+        'type': 'command',
+        'command': f'{python_abs} {plugindir}/hooks/post_tool_use.py',
+        'timeout': 45
+    }]
+}]
+
+# enabledPlugins
 if 'enabledPlugins' not in cfg:
     cfg['enabledPlugins'] = {}
 cfg['enabledPlugins']['less-toil'] = True
-with open(path, 'w') as f:
+
+with open(settings_path, 'w') as f:
     json.dump(cfg, f, indent=2)
-print('      Plugin enabled: less-toil')
+print('      Hooks: PreToolUse + PostToolUse on Write|Edit|MultiEdit')
+print('      Env:    CLAUDE_PLUGIN_ROOT = ' + plugindir)
 " 2>/dev/null && echo "      settings.json updated" || echo "      NOTE: Could not update settings.json (plugin may need manual enable)"
-fi
 echo ""
 
 # =============================================================================

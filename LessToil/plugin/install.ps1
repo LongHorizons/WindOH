@@ -471,40 +471,72 @@ Write-Host ""
 
 # Rewrite hooks.json to use the resolved Python path (venv or system).
 # Prevents "python: command not found" on systems where the command name differs.
+$pythonAbs = (Get-Command $INSTALL_PYTHON -ErrorAction SilentlyContinue).Source
+if (-not $pythonAbs) { $pythonAbs = $INSTALL_PYTHON }
+
 $hooksJsonPath = Join-Path $PLUGIN_DIR "hooks\hooks.json"
 if (Test-Path $hooksJsonPath) {
-    $pythonAbs = (Get-Command $INSTALL_PYTHON -ErrorAction SilentlyContinue).Source
-    if (-not $pythonAbs) { $pythonAbs = $INSTALL_PYTHON }
     $hooksContent = Get-Content $hooksJsonPath -Raw -Encoding UTF8
     $replacement = '"' + $pythonAbs + ' "'
-    $hooksContent = $hooksContent -replace '"python "', $replacement
+    $hooksContent = $hooksContent -replace '"python3 "', $replacement
     Set-Content -Path $hooksJsonPath -Value $hooksContent -Encoding UTF8 -NoNewline
     Write-Detail "hooks.json: using $pythonAbs"
 }
 
 # ==============================================================================
-# STEP 3: Register plugin in Claude Code settings
+# STEP 3: Register plugin and hooks in Claude Code settings
 # ==============================================================================
-Write-Step "3/8" "Enabling plugin in Claude Code settings..."
+Write-Step "3/8" "Registering hooks in Claude Code settings..."
 
 $settingsFile = Join-Path $HOME ".claude\settings.json"
 if (-not (Test-Path $settingsFile)) {
-    @'
-{"enabledPlugins":{"less-toil":true}}
-'@ | Set-Content -Path $settingsFile -Encoding UTF8
-    Write-Detail "Created settings.json with less-toil enabled"
+    $settingsJson = @{}
 } else {
     try {
         $settingsJson = Get-Content $settingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-        if (-not $settingsJson.enabledPlugins) {
-            $settingsJson | Add-Member -MemberType NoteProperty -Name 'enabledPlugins' -Value @{} -Force
-        }
-        $settingsJson.enabledPlugins | Add-Member -MemberType NoteProperty -Name 'less-toil' -Value $true -Force
-        $settingsJson | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsFile -Encoding UTF8
-        Write-Detail "settings.json updated"
     } catch {
-        Write-Detail "NOTE: Could not update settings.json (plugin may need manual enable)"
+        $settingsJson = @{}
     }
+}
+
+# env: set CLAUDE_PLUGIN_ROOT so hook scripts can import core/
+if (-not $settingsJson.env) {
+    $settingsJson | Add-Member -MemberType NoteProperty -Name 'env' -Value @{} -Force
+}
+$settingsJson.env | Add-Member -MemberType NoteProperty -Name 'CLAUDE_PLUGIN_ROOT' -Value $PLUGIN_DIR -Force
+
+# hooks: PreToolUse + PostToolUse on Write|Edit|MultiEdit with absolute paths
+if (-not $settingsJson.hooks) {
+    $settingsJson | Add-Member -MemberType NoteProperty -Name 'hooks' -Value @{} -Force
+}
+$preHook = @{
+    matcher = 'Write|Edit|MultiEdit'
+    hooks   = @(
+        @{ type = 'command'; command = "$pythonAbs $PLUGIN_DIR\hooks\pre_tool_use.py"; timeout = 45 }
+    )
+}
+$postHook = @{
+    matcher = 'Write|Edit|MultiEdit'
+    hooks   = @(
+        @{ type = 'command'; command = "$pythonAbs $PLUGIN_DIR\hooks\post_tool_use.py"; timeout = 45 }
+    )
+}
+$settingsJson.hooks | Add-Member -MemberType NoteProperty -Name 'PreToolUse' -Value @($preHook) -Force
+$settingsJson.hooks | Add-Member -MemberType NoteProperty -Name 'PostToolUse' -Value @($postHook) -Force
+
+# enabledPlugins
+if (-not $settingsJson.enabledPlugins) {
+    $settingsJson | Add-Member -MemberType NoteProperty -Name 'enabledPlugins' -Value @{} -Force
+}
+$settingsJson.enabledPlugins | Add-Member -MemberType NoteProperty -Name 'less-toil' -Value $true -Force
+
+try {
+    $settingsJson | ConvertTo-Json -Depth 6 | Set-Content -Path $settingsFile -Encoding UTF8
+    Write-Detail "Hooks: PreToolUse + PostToolUse on Write|Edit|MultiEdit"
+    Write-Detail "Env:   CLAUDE_PLUGIN_ROOT = $PLUGIN_DIR"
+    Write-Detail "settings.json updated"
+} catch {
+    Write-Detail "NOTE: Could not update settings.json (plugin may need manual enable)"
 }
 Write-Host ""
 
