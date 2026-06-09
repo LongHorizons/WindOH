@@ -1,4 +1,3 @@
-﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     LessToil Plugin -- PowerShell Installer for Windows
