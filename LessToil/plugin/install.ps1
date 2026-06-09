@@ -51,25 +51,40 @@
     One-liner from GitHub (run from your project directory).
 #>
 
-[CmdletBinding()]
-param(
-    [string]$ProjectDir = (Get-Location).Path,
-    [switch]$PluginOnly,
-    [switch]$Reindex,
-    [string]$FromZip = "",
-    [switch]$Accept,
-    [switch]$NoVenv,
-    [string]$Branch = "master",
-    [string]$RepoUrl = "https://github.com/LongHorizons/WindOH",
-    [switch]$Help
-)
-
 $ErrorActionPreference = "Stop"
+
+# --- Parse arguments (manual, so the script works with both .\install.ps1 and irm...|iex) ---
+# iex (Invoke-Expression) cannot parse [CmdletBinding()] / param() blocks.
+$ProjectDir = (Get-Location).Path
+$PluginOnly = $false
+$Reindex = $false
+$FromZip = ""
+$Accept = $false
+$NoVenv = $false
+$Branch = "master"
+$RepoUrl = "https://github.com/LongHorizons/WindOH"
+
+$_args = $args
+for ($_i = 0; $_i -lt $_args.Count; $_i++) {
+    switch ($_args[$_i]) {
+        '-ProjectDir'  { $_i++; if ($_i -lt $_args.Count) { $ProjectDir = $_args[$_i] } }
+        '-PluginOnly'  { $PluginOnly = $true }
+        '-Reindex'     { $Reindex = $true }
+        '-FromZip'     { $_i++; if ($_i -lt $_args.Count) { $FromZip = $_args[$_i] } }
+        '-Accept'      { $Accept = $true }
+        '-NoVenv'      { $NoVenv = $true }
+        '-Branch'      { $_i++; if ($_i -lt $_args.Count) { $Branch = $_args[$_i] } }
+        '-RepoUrl'     { $_i++; if ($_i -lt $_args.Count) { $RepoUrl = $_args[$_i] } }
+        '-Help'        { $Help = $true }
+        '-h'           { $Help = $true }
+        '--help'       { $Help = $true }
+    }
+}
 
 # --- Constants -----------------------------------------------------------------
 $PLUGIN_NAME = "less-toil"
 $PLUGIN_DIR = Join-Path $HOME ".claude\plugins\$PLUGIN_NAME"
-$SCRIPT_DIR = Split-Path $MyInvocation.MyCommand.Path -Parent
+$SCRIPT_DIR = if ($MyInvocation.MyCommand.Path) { Split-Path $MyInvocation.MyCommand.Path -Parent } else { Get-Location }
 $TEMP_CLONE = Join-Path ([System.IO.Path]::GetTempPath()) "claude-code-plugin-$PID"
 
 # --- ANSI helpers (Windows 10+ console) ----------------------------------------
@@ -81,7 +96,7 @@ function Write-Err { Write-Host "      ERROR: $($args[0])" -ForegroundColor Red 
 function Write-Detail { Write-Host "      $($args[0])" -ForegroundColor Gray }
 
 # --- Parse arguments -----------------------------------------------------------
-if ($Help -or $args -contains '-h' -or $args -contains '--help') {
+if ($Help) {
     @"
 Usage: .\install.ps1 [OPTIONS]
 
