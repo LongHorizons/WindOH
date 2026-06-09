@@ -1,0 +1,60 @@
+#cloud-config
+# =============================================================================
+# WindOH Cloud Agent — Azure VM cloud-init (Ubuntu 22.04 LTS)
+# =============================================================================
+# Managed identity provides DefaultAzureCredential — no secrets in config.
+# Agent polls: Activity Log, NSG Flow Logs, Sentinel, AD Sign-in Logs,
+# Key Vault logs, Azure Policy — 6 services across N subscriptions.
+# =============================================================================
+
+write_files:
+  - path: /etc/windoh/config.toml
+    permissions: "0600"
+    content: |
+      [agent]
+      id = "${agent_id}"
+
+      [paths]
+      data_dir = "/var/lib/windoh"
+
+      [azure]
+      tenant_id = "${tenant_id}"
+      subscription_ids = [${subscription_ids}]
+      poll_interval_secs = ${poll_interval_secs}
+
+      [azure.services]
+      activity_log = true
+      nsg_flow_logs = true
+      sentinel_alerts = true
+      ad_signin_logs = true
+      key_vault_logs = true
+      azure_policy = true
+
+      [export.events]
+      endpoint = "${elasticsearch_endpoint}"
+      api_key = "${elasticsearch_api_key}"
+      index_pattern = "cloud-events-azure"
+
+      [export.health]
+      endpoint = "${elasticsearch_endpoint}"
+      api_key = "${elasticsearch_api_key}"
+      index_pattern = "cloud-health"
+
+  - path: /opt/windoh/install.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      AGENT_BIN="/opt/windoh/wizard-azure"
+      curl -fsSL -o "$AGENT_BIN" \
+        "https://github.com/LongHorizons/WindOH/raw/master/LongHorizons/releases/cloud/wizard-azure"
+      chmod 755 "$AGENT_BIN"
+      "$AGENT_BIN" init --tenant-id "${tenant_id}" --agent-id "${agent_id}"
+      "$AGENT_BIN" install /etc/windoh/config.toml
+
+runcmd:
+  - mkdir -p /var/lib/windoh
+  - bash /opt/windoh/install.sh
+  - /opt/windoh/wizard-azure status
+
+final_message: "WindOH Azure cloud agent installed. Agent ID: ${agent_id}"

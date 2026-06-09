@@ -1,0 +1,62 @@
+#cloud-config
+# =============================================================================
+# WindOH Cloud Agent — GCE Instance cloud-init (Container-Optimized OS)
+# =============================================================================
+# The attached service account provides Application Default Credentials.
+# No service account keys on disk — OAuth2 tokens from metadata server.
+# =============================================================================
+
+write_files:
+  - path: /etc/windoh/config.toml
+    permissions: "0600"
+    content: |
+      [agent]
+      id = "${agent_id}"
+
+      [paths]
+      data_dir = "/var/lib/windoh"
+
+      [gcp]
+      project_ids = [${monitored_project_ids}]
+      poll_interval_secs = ${poll_interval_secs}
+
+      [gcp.services]
+      cloud_audit_logs = true
+      vpc_flow_logs = true
+      security_command_center = true
+      cloud_logging = true
+      access_transparency = true
+
+      [export.events]
+      endpoint = "${elasticsearch_endpoint}"
+      api_key = "${elasticsearch_api_key}"
+      index_pattern = "cloud-events-gcp"
+
+      [export.health]
+      endpoint = "${elasticsearch_endpoint}"
+      api_key = "${elasticsearch_api_key}"
+      index_pattern = "cloud-health"
+
+      %{ if enable_bigquery_export }
+      [bigquery]
+      dataset = "${bigquery_dataset}"
+      %{ endif }
+
+  - path: /opt/windoh/install.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      AGENT_BIN="/opt/windoh/wizard-gcp"
+      curl -fsSL -o "$AGENT_BIN" \
+        "https://github.com/LongHorizons/WindOH/raw/master/LongHorizons/releases/cloud/wizard-gcp"
+      chmod 755 "$AGENT_BIN"
+      "$AGENT_BIN" init --project-id "${project_id}" --agent-id "${agent_id}"
+      "$AGENT_BIN" install /etc/windoh/config.toml
+
+runcmd:
+  - mkdir -p /var/lib/windoh
+  - bash /opt/windoh/install.sh
+  - /opt/windoh/wizard-gcp status
+
+final_message: "WindOH GCP cloud agent installed. Agent ID: ${agent_id}"

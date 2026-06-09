@@ -74,7 +74,25 @@ for wizard in wizard-aws wizard-azure wizard-gcp wizard-oracle wizard-k8s; do
 done
 ```
 
+## Architecture
+
+Full per-provider architecture with Mermaid diagrams, CloudEvent schema mapping, data flow animations, and deployment patterns: **[CLOUD-ARCHITECTURE.md](CLOUD-ARCHITECTURE.md)**
+
+## Terraform
+
+Production-grade infrastructure-as-code for each provider in `terraform/`:
+
+| Provider | Directory | What It Creates |
+|----------|-----------|-----------------|
+| **AWS** | [`terraform/aws/`](terraform/aws/) | IAM role (least-privilege, 9 service policies), CloudTrail (multi-region + S3 data events + Lambda data events), VPC Flow Logs (S3 + CloudWatch), GuardDuty (all features including S3/EKS/RDS/EBS malware), Security Hub (CIS 1.4 + Foundational), S3 bucket encryption (KMS CMK), Config rules, EC2 instance w/ IMDSv2, Bedrock InvokeModel (Claude 4.x), S3 Parquet archive w/ lifecycle tiering |
+| **Azure** | [`terraform/azure/`](terraform/azure/) | Resource group, User-assigned managed identity (DefaultAzureCredential), Log Analytics workspace + Sentinel onboarding, Activity Log diagnostic settings (7 categories per subscription), NSG Flow Log storage account, Azure VM (Ubuntu 22.04), NSG with egress rules, Key Vault w/ audit diagnostics |
+| **GCP** | [`terraform/gcp/`](terraform/gcp/) | Service account (ADC), IAM bindings (logging.viewer, compute.networkViewer, securitycenter.findingsViewer per project), VPC Flow Log sampling config (100%, all metadata), GCE instance (Container-Optimized OS, Shielded VM), firewall egress rule, optional BigQuery export dataset |
+| **Oracle** | [`terraform/oracle/`](terraform/oracle/) | Dynamic group + IAM policy (instance principals — no keys), VCN Flow Log (service log), NSG egress rules, Compute instance (Oracle Linux 8, flex shape), Cloud Guard enablement, optional OCI Streaming (Kafka-compatible, 50 GB free tier) |
+
+Each Terraform directory is self-contained with provider-specific least-privilege policies, native credential chain setup (no long-lived access keys on disk), and cloud-init templates that download and install the agent wizard binary on first boot.
+
 ## Requirements
 - Cloud provider credentials (IAM role, service principal, service account, API key)
 - Outbound HTTPS to cloud APIs + Elasticsearch
 - Elasticsearch 7.x or 8.x
+- Terraform >= 1.5.0

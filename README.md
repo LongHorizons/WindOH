@@ -80,7 +80,7 @@ These are non-negotiable. They are the decision framework for every component, e
 
 **1. Deterministic over heuristic.** Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they do not. There is no confidence score to tune, no threshold to argue about, no training distribution to drift from. This is court-admissible, SIEM-ingestible, and immune to adversarial evasion.
 
-**2. Local-first over cloud-dependent.** LLM enrichment runs against a local endpoint -- llama.cpp, Ollama, vLLM. No telemetry data transits the public internet for enrichment under any configuration. The agent operates fully independently even when Elasticsearch is unreachable, buffering to a local SQLite outbox with exponential backoff retry.
+**2. Deploy anywhere -- cloud VPC, on-prem, air-gapped, or hybrid.** The platform runs equally well inside your AWS, Azure, GCP, or Oracle VPC, on bare-metal in your datacenter, or fully air-gapped. Dedicated cloud agents ship for 24 services across 5 providers (AWS 9, Azure 6, GCP 5, Oracle 4, Kubernetes 4) with native credential chains and concurrent API polling — cloud telemetry feeds the same stable token / payload token pipeline as Windows ETW and Linux eBPF events. LLM enrichment targets your own endpoint — llama.cpp, Ollama, vLLM, or any OpenAI-compatible API including cloud-hosted inference — and no telemetry transits the public internet for enrichment under any configuration. The agent buffers to a local SQLite outbox with exponential backoff retry when Elasticsearch is unreachable.
 
 **3. Observable over opaque.** Every automated decision carries provenance. A rarity band includes the decay score, observation count, and half-life parameters. A Markov anomaly flag includes the transition probability and the expected next behavior. LLM enrichment stores the raw prompt and response alongside the parsed output. The analyst can always inspect the inputs that produced the output.
 
@@ -92,10 +92,12 @@ These are non-negotiable. They are the decision framework for every component, e
 
 **7. Reproducible execution.** Same memory dump -- same SHA-256 fingerprint for every process, service, module, and network profile. Same ETW behavior -- same stable token, independent of host, time, or session. Same enrichment prompt -- same cached result. Idempotency is a design constraint, not an optimization.
 
-### What Stays Local
+### What Stays Within Your Infrastructure
+
+WindOH is architected for environments where telemetry never leaves the boundary you control — whether that boundary is a cloud VPC, a corporate datacenter, or an air-gapped facility. Cloud agents run inside the same AWS/Azure/GCP/Oracle environment they monitor. On-prem agents run alongside your Windows and Linux fleets. Either way, the same guarantees hold:
 
 - All behavioral telemetry. Process command lines, network targets, user identities -- the most sensitive data in a security environment.
-- All LLM enrichment. The prompt goes to a local endpoint. The response comes back to local storage. Nothing leaves.
+- All LLM enrichment. The prompt goes to your endpoint (local or cloud-hosted). The response goes to your storage. Nothing leaves your infrastructure boundary.
 - All token generation. The stable token and payload token are computed on the endpoint. Only the hashes are exported.
 - All encryption keys. DPAPI-bound to the service account. Never transmitted, never shared.
 
@@ -119,7 +121,7 @@ The LongHorizons agent is designed for environments where **being noticed is a f
 
 - **No silent data loss.** If a buffer fills, it is a diagnosable event. If an export fails, it is retried and tracked. If a dead-letter queue accumulates, it surfaces in the health dashboard. Data loss must be explicit and measurable.
 
-- **No cloud requirement.** The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- operates on infrastructure you control. Internet access is only needed for external threat intelligence enrichment (SearXNG), and that is optional.
+- **Multi-environment by design.** The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- operates on infrastructure you control: your cloud VPC, your datacenter, or your air-gapped network. Pre-built cloud-native agents ship for AWS, Azure, GCP, Oracle, and Kubernetes — deploy directly inside your cloud environment with native credential chains (AWS SDK credential chain, DefaultAzureCredential, GCP Application Default Credentials) and concurrent API polling across 24 services. The same platform that monitors your Windows endpoints simultaneously ingests your cloud control plane audit logs, your Kubernetes API server events, and your firewall flow logs. Internet access is only required for external threat intelligence enrichment (SearXNG), and that is optional.
 
 ---
 
@@ -268,7 +270,7 @@ The platform is built on a set of explicitly stated engineering principles. Each
 | Principle | Implication |
 |---|---|
 | **Deterministic over heuristic** | Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they don't. |
-| **Local-first over cloud-dependent** | LLM enrichment runs against a local endpoint. The agent operates without internet connectivity. No data exfiltration path exists. |
+| **Cloud-native and on-prem parity** | The same pipeline runs in your AWS/Azure/GCP/Oracle VPC, on bare-metal, or air-gapped. Dedicated cloud agents poll 24 services across 5 providers with native credential chains. LLM enrichment targets your own endpoint — no telemetry exfiltration path exists regardless of deployment environment. |
 | **Observable over opaque** | Every pipeline stage emits structured diagnostics. Every decision (rarity band, anomaly flag, enrichment) carries provenance -- the inputs that produced it are inspectable. |
 | **Safe-by-default** | Encryption at rest is mandatory. DPAPI-protected master keys. AES-256-GCM with HKDF-derived purpose-specific keys. No plaintext credentials in config files. |
 | **Graceful degradation** | If Elasticsearch is unreachable, the agent buffers to SQLite outbox with retry and dead-letter. If the LLM is unavailable, enrichment queues without data loss. No component failure cascades. |

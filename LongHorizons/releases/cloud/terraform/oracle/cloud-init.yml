@@ -1,0 +1,65 @@
+#cloud-config
+# =============================================================================
+# WindOH Cloud Agent — OCI Compute Instance cloud-init (Oracle Linux 8)
+# =============================================================================
+# The dynamic group + IAM policy grant instance principals — no API signing
+# key required when running on OCI Compute. The agent authenticates via
+# the IMDS v2 token and calls OCI APIs natively.
+# =============================================================================
+
+write_files:
+  - path: /etc/windoh/config.toml
+    permissions: "0600"
+    content: |
+      [agent]
+      id = "${agent_id}"
+
+      [paths]
+      data_dir = "/var/lib/windoh"
+
+      [oracle]
+      tenancy_ocid = "${tenancy_ocid}"
+      regions = ["${region}"]
+      poll_interval_secs = ${poll_interval_secs}
+      use_instance_principals = ${use_instance_principals}
+
+      [oracle.services]
+      audit_logs = true
+      vcn_flow_logs = true
+      cloud_guard = true
+      events_service = true
+
+      [export.events]
+      endpoint = "${elasticsearch_endpoint}"
+      api_key = "${elasticsearch_api_key}"
+      index_pattern = "cloud-events-oci"
+
+      [export.health]
+      endpoint = "${elasticsearch_endpoint}"
+      api_key = "${elasticsearch_api_key}"
+      index_pattern = "cloud-health"
+
+      %{ if enable_streaming }
+      [streaming]
+      stream_id = "${stream_id}"
+      bootstrap_servers = "cell-1.streaming.${region}.oci.oraclecloud.com:9092"
+      %{ endif }
+
+  - path: /opt/windoh/install.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      AGENT_BIN="/opt/windoh/wizard-oracle"
+      curl -fsSL -o "$AGENT_BIN" \
+        "https://github.com/LongHorizons/WindOH/raw/master/LongHorizons/releases/cloud/wizard-oracle"
+      chmod 755 "$AGENT_BIN"
+      "$AGENT_BIN" init --tenancy-ocid "${tenancy_ocid}" --agent-id "${agent_id}"
+      "$AGENT_BIN" install /etc/windoh/config.toml
+
+runcmd:
+  - mkdir -p /var/lib/windoh
+  - bash /opt/windoh/install.sh
+  - /opt/windoh/wizard-oracle status
+
+final_message: "WindOH Oracle cloud agent installed. Agent ID: ${agent_id}"
