@@ -397,21 +397,29 @@ if (Test-Path (Join-Path $SCRIPT_DIR "core\manifest.py")) {
         # Clean up any previous temp clone
         if (Test-Path $TEMP_CLONE) { Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue }
 
-        # Sparse checkout: only fetch the plugin directory
+        # Sparse checkout: only fetch the plugin directory.
+        # Relax ErrorActionPreference — git writes progress to stderr which
+        # PowerShell treats as a NativeCommandError under Stop mode.
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         git clone --depth 1 --filter=blob:none --sparse "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        $cloneOk = ($LASTEXITCODE -eq 0)
+        if (-not $cloneOk) {
             # Fallback: full shallow clone (older git)
             Write-Detail "Sparse checkout failed, trying full shallow clone..."
             Remove-Item -Recurse -Force $TEMP_CLONE -ErrorAction SilentlyContinue
             git clone --depth 1 "$RepoUrl" "$TEMP_CLONE" 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Err "Failed to clone repository. Check your internet connection and GitHub access."
-                exit 1
-            }
-        } else {
+            $cloneOk = ($LASTEXITCODE -eq 0)
+        }
+        if ($cloneOk) {
             Push-Location $TEMP_CLONE
             git sparse-checkout set "LessToil/plugin" 2>&1 | Out-Null
             Pop-Location
+        }
+        $ErrorActionPreference = $prevEAP
+        if (-not $cloneOk) {
+            Write-Err "Failed to clone repository. Check your internet connection and GitHub access."
+            exit 1
         }
 
         $LOCAL_PLUGIN_SRC = Join-Path $TEMP_CLONE "LessToil\plugin"
