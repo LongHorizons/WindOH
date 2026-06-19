@@ -32,6 +32,10 @@
 - [ADR-006: Markov Chains for Sequence Prediction](adr/0006-markov-chains-over-deep-learning.md)
 - [ADR-007: Embedded Dependencies](adr/0007-embedded-dependencies.md)
 
+## Validation and Testing
+
+- [VALIDATION.md](VALIDATION.md) -- Validation strategy, per-component test coverage, cross-component integration tests, performance benchmarks, known gaps and planned tests
+
 ## Project-Level
 
 - [ENGINEERING_PRINCIPLES.md](../ENGINEERING_PRINCIPLES.md) — Design principles and decision framework
