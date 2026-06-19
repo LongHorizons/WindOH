@@ -16,7 +16,7 @@
   <img src="LessVolatile/LessVolatile.gif" alt="LessVolatile Memory Forensics">
 </p>
 
-**Behavioral telemetry collection and analysis, memory forensics at scale, covert forensic triage, and multi-threaded Atomic Red Team execution for Windows environments.**
+**Behavioral telemetry across every surface — monolithic kernels, cloud control planes, firewall appliances, and Kubernetes clusters. Memory forensics at scale. Covert forensic triage. Adversary emulation. One platform, one token model, one answer to the question that matters.**
 
 ---
 
@@ -24,9 +24,11 @@
 
 ### What This Is
 
-WindOH is a Windows security intelligence platform. It is not a SIEM, not an EDR, and not a dashboard factory. It is a system for answering one question with cryptographic certainty: **what just happened, and have we ever seen it before?**
+WindOH is a multi-surface behavioral telemetry platform. It is not a SIEM, not an EDR, and not a dashboard factory. It is a system for answering one question with cryptographic certainty across every environment you operate: **what just happened, and have we ever seen it before?**
 
-Three components answer this question at different altitudes:
+Windows NT kernel events. Linux eBPF probes tracing execve through tcp_connect. AWS CloudTrail recording an IAM role assumption in us-east-1. A Palo Alto firewall dropping a packet at the perimeter. A Kubernetes admission controller rejecting a privileged pod. An Azure Sentinel Fusion rule correlating three low-severity alerts into a high-severity incident. All of it flows through the same pipeline — normalized, tokenized, baselined, enriched — and the same question answers across all of it instantaneously.
+
+The platform spans five surfaces today — Windows, Linux, firewall, cloud, and Kubernetes — with macOS, Android, OT/IoT, and SaaS architected. Four components answer the question at different altitudes:
 
 | Component | Role | Scale |
 |---|---|---|
