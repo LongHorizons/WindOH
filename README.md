@@ -2,20 +2,6 @@
   <img src="windOH.png" alt="WindOH">
 </p>
 
-<p align="center">
-  <img src="Nice.gif" alt="WindOH Platform Demo">
-  <img src="LongHorizons/Wizard.gif" alt="LongHorizons Agent Setup Wizard">
-</p>
-
-<p align="center">
-  <img src="OneDriveStandaloneUpdaterr/OneDriveStandaloneUpdaterr.gif" alt="OneDriveStandaloneUpdaterr Forensic Triage">
-  <img src="Compute/Compute.gif" alt="HotStuff Workstation">
-</p>
-
-<p align="center">
-  <img src="LessVolatile/LessVolatile.gif" alt="LessVolatile Memory Forensics">
-</p>
-
 **Behavioral telemetry across every surface — monolithic kernels, cloud control planes, firewall appliances, and Kubernetes clusters. Memory forensics at scale. Covert forensic triage. Adversary emulation. One platform, one token model, one answer to the question that matters.**
 
 ---
@@ -134,33 +120,55 @@ The LongHorizons agent is designed for environments where **being noticed is a f
 ```mermaid
 graph TB
     classDef person fill:#08427b,stroke:#052e56,color:#fff
+    classDef surface fill:#dea584,stroke:#9e6b4a,color:#000
     classDef external fill:#999,stroke:#666,color:#fff
     classDef system fill:#1168bd,stroke:#0b4884,color:#fff
+    classDef forensics fill:#43a047,stroke:#2e7d32,color:#fff
 
     Analyst["Security Analyst"]
     SOC["SOC / IR Team"]
-    Endpoints["Windows Endpoints<br/>(1-100,000)"]
-    Elasticsearch[("Elasticsearch<br/>Cluster")]
-    LLM[("Local LLM<br/>llama.cpp / Ollama / vLLM")]
+
+    subgraph TelemetrySources["Telemetry Surfaces"]
+        Win["Windows Endpoints<br/>ETW kernel + user-mode<br/>47 providers · 200+ auto-discovered"]
+        Linux["Linux Servers<br/>eBPF CO-RE · auditd · fanotify<br/>12 probes · 5-tier ladder"]
+        FW["Firewall Appliances<br/>nftables · iptables · pf · syslog<br/>22+ vendors · 18 parsers"]
+        Cloud["Cloud APIs<br/>AWS · Azure · GCP · Oracle<br/>24 services · unified schema"]
+        K8s["Kubernetes Clusters<br/>audit · pod security · admission<br/>network policies"]
+    end
+
+    subgraph Intelligence["WindOH Platform"]
+        Core["Behavioral Intelligence<br/>normalize · tokenize · enrich<br/>Markov prediction · ART coverage"]
+        Forensics["Forensics Suite<br/>LessVolatile: memory forensics at scale<br/>OneDriveStandaloneUpdaterr: covert triage<br/>LessAtomic: ART executor (752 tests)"]
+    end
+
+    Elasticsearch[("Elasticsearch 8.x<br/>events · exemplars · patterns")]
+    LLM[("LLM Inference<br/>llama.cpp / Ollama / vLLM<br/>Bedrock (AWS VPC)")]
     ThreatIntel["Threat Intel<br/>SearXNG Metasearch"]
-    ART["Atomic Red Team<br/>Adversary Emulation"]
+    ART["Atomic Red Team<br/>265 techniques · 752 tests"]
+    DevTooling["LessToil<br/>Codebase Intelligence<br/>56 languages · 40 modules"]
 
-    WindOH["<b>WindOH Platform</b><br/>Telemetry → Enrichment → Detection → Forensics"]
-    DevTooling["LessToil<br/>Codebase Intelligence"]
-
-    Analyst --> WindOH
-    SOC --> WindOH
-    Endpoints -->|"ETW Telemetry<br/>(gzip JSON)"| Elasticsearch
-    Elasticsearch -->|"Poll & Ingest"| WindOH
-    WindOH -->|"Enrichment<br/>(new tokens only)"| LLM
-    WindOH -->|"IOC Lookup"| ThreatIntel
-    ART -->|"Test Executions"| Endpoints
-    WindOH -->|"Coverage Mapping"| ART
-    WindOH --> DevTooling
+    Analyst --> Core
+    SOC --> Core
+    Win -->|"ETW gzip JSON"| Elasticsearch
+    Linux -->|"eBPF gzip JSON"| Elasticsearch
+    FW -->|"syslog gzip JSON"| Elasticsearch
+    Cloud -->|"CloudEvent gzip JSON"| Elasticsearch
+    K8s -->|"audit gzip JSON"| Elasticsearch
+    Elasticsearch -->|"poll & ingest"| Core
+    Core -->|"enrich<br/>(new tokens only)"| LLM
+    Core -->|"IOC lookup"| ThreatIntel
+    ART -->|"test executions"| Win
+    Core -->|"coverage mapping"| ART
+    Core --> DevTooling
+    Forensics -->|"forensic artifacts"| Win
+    Forensics -->|"forensic artifacts"| Linux
+    Analyst --> Forensics
 
     class Analyst,SOC person
+    class Win,Linux,FW,Cloud,K8s surface
     class Elasticsearch,LLM,ThreatIntel,ART external
-    class WindOH,DevTooling system
+    class Core,DevTooling system
+    class Forensics forensics
 ```
 
 ### Container Diagram (C4 Level 2)
@@ -173,51 +181,66 @@ graph TB
     classDef infra fill:#666,stroke:#444,color:#fff
     classDef store fill:#336791,stroke:#1a3d55,color:#fff
 
-    subgraph Endpoint ["Windows Endpoint"]
-        LH["LongHorizons Agent<br/>Rust · ~8 MB · 47 ETW providers"]
-        OSD["OneDriveStandaloneUpdaterr<br/>Rust · ~324 MB · KAPE+PsExec+EZ Tools"]
-        LV["LessVolatile<br/>Rust · ~129 MB · Volatility 3+Python 3.9"]
+    subgraph Agents ["Telemetry Agents (Rust, native binaries)"]
+        LH-Win["LongHorizons Windows<br/>ETW: 47 kernel/user providers<br/>PE metadata · process forensics<br/>browser artifacts · registry diff"]
+        LH-Linux["LongHorizons Linux<br/>eBPF CO-RE: 12 probes<br/>auditd · fanotify · /proc<br/>5-tier adaptive ladder"]
+        LH-FW["LongHorizons Firewall<br/>nftables · iptables · pf<br/>syslog UDP 514 · REST API<br/>22+ vendors · GeoIP/ASN"]
+        LH-Cloud["LongHorizons Cloud<br/>AWS 9 · Azure 6 · GCP 5<br/>Oracle 4 · K8s 4<br/>CloudEvent unified schema"]
     end
 
-    subgraph Transport ["Transport Layer"]
-        ES[("Elasticsearch 8.x<br/>events · exemplars · patterns")]
+    subgraph Forensics ["Forensics Tools (Rust, single binaries)"]
+        LV["LessVolatile<br/>Volatility 3 + Python 3.9 embedded<br/>68 Win · 29 Linux · 26 Mac plugins<br/>cross-case fingerprinting"]
+        OSD["OneDriveStandaloneUpdaterr<br/>KAPE · PsExec · Hayabusa<br/>EZ Tools · raw disk imager<br/>4-dimension triage"]
+        LA["LessAtomic<br/>265 ART techniques embedded<br/>752 atomic tests · Rayon pool<br/>pass/fail/skip/timeout"]
     end
 
-    subgraph Application ["Intelligence Application"]
-        API[WindOH API<br/>Next.js 14 + tRPC]
-        Enrichment[Enrichment Worker<br/>BullMQ + LLM Client]
-        Markov[Markov Engine<br/>Transition Matrices]
-        ArtMapper[ART Mapper<br/>Coverage Analysis]
-        Search[SearXNG Client<br/>IOC Enrichment]
+    subgraph Transport ["Transport"]
+        ES[("Elasticsearch 8.x<br/>events · exemplars · patterns<br/>health · diagnostics")]
     end
 
-    subgraph Storage ["Persistence Layer"]
-        Mongo[("MongoDB 7<br/>tokens · sequences · intel")]
-        Redis[("Redis<br/>BullMQ queues · cache")]
+    subgraph Application ["WindOH Application (TypeScript/Next.js)"]
+        API["tRPC API<br/>Next.js 14"]
+        Worker["Enrichment Worker<br/>BullMQ + LLM Client"]
+        Markov["Markov Engine<br/>transition matrices<br/>surprise scoring"]
+        ARTMap["ART Mapper<br/>coverage analysis"]
+        Search["SearXNG Client<br/>IOC enrichment"]
+        Collab["Collab Gateway<br/>WebSocket<br/>E2E encrypted"]
+    end
+
+    subgraph Storage ["Persistence"]
+        Mongo[("MongoDB 7<br/>tokens · sequences<br/>enrichment cache")]
+        Redis[("Redis<br/>BullMQ queues<br/>session cache")]
     end
 
     subgraph AI ["Inference"]
-        LLM[Local LLM<br/>OpenAI-compatible API]
+        LLM[("LLM Endpoint<br/>llama.cpp / Ollama / vLLM<br/>Bedrock (AWS VPC)")]
     end
 
     subgraph Dev ["Developer Tooling"]
-        LT["LessToil Plugin<br/>Python · 40 modules · 56 languages"]
+        LT["LessToil Plugin<br/>Python · 40 modules<br/>56 languages · 26-table SQLite"]
     end
 
-    LH -->|"gzip JSON<br/>bulk API"| ES
+    LH-Win -->|"gzip JSON bulk"| ES
+    LH-Linux -->|"gzip JSON bulk"| ES
+    LH-FW -->|"gzip JSON bulk"| ES
+    LH-Cloud -->|"gzip JSON bulk"| ES
+    LV -->|"forensic artifacts"| LH-Win
+    OSD -->|"triage artifacts"| LH-Win
+    LA -->|"ART executions"| LH-Win
     ES -->|"poll new docs"| API
     API --> Mongo
     API --> Redis
-    Redis --> Enrichment
-    Enrichment -->|"structured prompt<br/>(new tokens only)"| LLM
-    Enrichment --> Mongo
+    Redis --> Worker
+    Worker -->|"structured prompt<br/>(new tokens only)"| LLM
+    Worker --> Mongo
     API --> Markov
     Markov --> Mongo
-    API --> ArtMapper
+    API --> ARTMap
     API --> Search
+    API --> Collab
 
-    class LH,OSD,LV rust
-    class API,Enrichment,Markov,ArtMapper,Search ts
+    class LH-Win,LH-Linux,LH-FW,LH-Cloud,LV,OSD,LA rust
+    class API,Worker,Markov,ARTMap,Search,Collab ts
     class LT py
     class ES,Redis infra
     class Mongo,LLM store
@@ -340,6 +363,10 @@ Enrichment is permanently cached in MongoDB -- once per payload token, never rep
 
 ### LongHorizons -- Endpoint Telemetry Agent
 
+<p align="center">
+  <img src="LongHorizons/Wizard.gif" alt="LongHorizons Agent Setup Wizard">
+</p>
+
 **Rust. Single ~8 MB binary. No runtime dependencies. Runs as a native service (Windows SCM / systemd / OpenRC / sysvinit / runit).**
 
 Cross-platform telemetry agent spanning four surfaces: Windows endpoints, Linux servers, firewall appliances, and cloud APIs. Every platform feeds into the same ingestion pipeline: platform-specific mapping → normalized schema → deterministic tokenization → Count-Min Sketch rarity estimation → exemplar reservoir sampling → SQLite outbox → Elasticsearch bulk export.
@@ -363,6 +390,10 @@ Full per-platform architecture: [LongHorizons/ARCHITECTURE.md](LongHorizons/ARCH
 
 ### WindOH -- Behavioral Intelligence Application
 
+<p align="center">
+  <img src="Nice.gif" alt="WindOH Platform Demo">
+</p>
+
 **TypeScript/Next.js. MongoDB + Redis + local LLM.**
 
 > **WindOH.us** -- A hosted platform for behavioral token enrichment, detection engineering, Markov sequence analysis, and investigation workflow is available at [windoh.us](https://windoh.us). It provides a managed entry point for teams that want the enrichment and detection capabilities without self-hosting the application stack.
@@ -381,6 +412,10 @@ Full platform documentation: [WindOH/](WindOH/) -- 6-document deck covering arch
 
 ### LessVolatile -- Memory Forensics at Scale
 
+<p align="center">
+  <img src="LessVolatile/LessVolatile.gif" alt="LessVolatile Memory Forensics">
+</p>
+
 **Rust. Single binary. Embeds Volatility 3 + Python 3.9. Zero install.**
 
 > **Download**: [Google Drive](https://drive.google.com/drive/folders/19HrARB469o9b06lHkflhK8UE7Oarb-oA) (~129 MB)
@@ -394,6 +429,10 @@ Point at a memory dump (or a directory of hundreds). Every relevant plugin runs 
 - At $200/hr analyst rate: $700/dump manual → $16/dump automated
 
 ### OneDriveStandaloneUpdaterr -- Covert Forensic Triage
+
+<p align="center">
+  <img src="OneDriveStandaloneUpdaterr/OneDriveStandaloneUpdaterr.gif" alt="OneDriveStandaloneUpdaterr Forensic Triage">
+</p>
 
 **Rust. Single binary. Embeds KAPE, PsExec, Hayabusa, Eric Zimmerman tools, and a raw disk imager.**
 
@@ -425,9 +464,18 @@ graph LR
     classDef boundary fill:#e53935,stroke:#b71c1c,color:#fff
     classDef external fill:#999,stroke:#666,color:#fff
 
-    subgraph Endpoint ["Trust Zone: Windows Endpoint"]
-        Agent[LongHorizons Agent<br/>LocalSystem]
-        SQLite[(SQLite<br/>Encrypted at rest)]
+    subgraph EndpointZone ["Trust Zone: Telemetry Endpoints"]
+        WinAgent["LongHorizons Windows<br/>LocalSystem<br/>SQLite encrypted at rest"]
+        LinuxAgent["LongHorizons Linux<br/>root / CAP_BPF<br/>SQLite encrypted at rest"]
+        FWAgent["LongHorizons Firewall<br/>root / CAP_NET_RAW<br/>SQLite encrypted at rest"]
+        CloudAgent["LongHorizons Cloud<br/>IAM role / managed identity<br/>SQLite encrypted at rest"]
+        K8sAgent["LongHorizons K8s<br/>ServiceAccount<br/>SQLite encrypted at rest"]
+    end
+
+    subgraph ForensicsZone ["Trust Zone: Forensics Tools"]
+        LV["LessVolatile<br/>memory dump processor<br/>fingerprint deterministic"]
+        OSD["OneDriveStandaloneUpdaterr<br/>covert triage<br/>PsExec remote orchestration"]
+        LA["LessAtomic<br/>ART executor<br/>752 tests · safety gates"]
     end
 
     subgraph AppZone ["Trust Zone: Application Host"]
@@ -438,25 +486,35 @@ graph LR
     end
 
     subgraph ExtZone ["External Zone"]
-        ES[("Elasticsearch<br/>(transport only)")]
-        LLM["Local LLM<br/>(same network)"]
-        SearXNG["SearXNG"]
+        ES[("Elasticsearch 8.x<br/>transport only · API key auth")]
+        LLM["LLM Endpoint<br/>same network / VPC"]
+        SearXNG["SearXNG<br/>optional · threat intel"]
     end
 
-    Agent -->|"TLS + API key"| ES
+    WinAgent -->|"TLS + API key"| ES
+    LinuxAgent -->|"TLS + API key"| ES
+    FWAgent -->|"TLS + API key"| ES
+    CloudAgent -->|"TLS + API key"| ES
+    K8sAgent -->|"TLS + API key"| ES
+    LV -->|"local artifacts"| WinAgent
+    OSD -->|"ADMIN$ share<br/>PsExec SYSTEM"| WinAgent
+    LA -->|"test execution"| WinAgent
     ES -->|"TLS"| API
     API -->|"TLS"| LLM
     API -->|"TLS"| SearXNG
     
-    style Endpoint fill:#1b5e20,stroke:#0d3b12,color:#fff
+    style EndpointZone fill:#1b5e20,stroke:#0d3b12,color:#fff
+    style ForensicsZone fill:#4a148c,stroke:#311b92,color:#fff
     style AppZone fill:#0d47a1,stroke:#0a2f6e,color:#fff
     style ExtZone fill:#424242,stroke:#212121,color:#fff
 ```
 
 **Trust boundary notes:**
-- The agent encrypts all sensitive data at rest (AES-256-GCM + DPAPI). Elasticsearch receives only encrypted or non-sensitive fields.
-- The application host is assumed to be within the same network boundary as the local LLM. No data transits the public internet for enrichment.
-- Elasticsearch is treated as a transport layer, not a trust zone. API key authentication is mandatory.
+- Every agent encrypts all sensitive data at rest (AES-256-GCM + platform-appropriate key protection: DPAPI on Windows, filesystem on Linux, IAM on cloud). Elasticsearch receives only hashed or non-sensitive fields.
+- The application host is assumed to be within the same network boundary as the LLM endpoint. No telemetry transits the public internet for enrichment.
+- Cloud agents run inside the same AWS/Azure/GCP/Oracle environment they monitor. Credential chains use native IMDS/managed identity -- no long-lived access keys on disk.
+- Elasticsearch is treated as a transport layer, not a trust zone. API key authentication is mandatory on every agent connection.
+- Forensics tools operate on local artifacts or within the same administrative boundary as the endpoints they target. PsExec remote orchestration requires ADMIN$ share access.
 - Queue persistence (Redis + BullMQ) ensures no enrichment jobs are lost during worker restarts.
 
 Full threat model: [docs/security/THREAT_MODEL.md](docs/security/THREAT_MODEL.md)
@@ -591,6 +649,10 @@ The public-facing repository was assembled, documented, and packaged in 3 days u
 | **Disciplines** | Rust systems programming, TypeScript full-stack, Python developer tooling, AI/LLM prompt engineering, Windows kernel internals, cryptographic engineering, security operations, technical writing |
 | **Hardware** | HotStuff workstation (96 logical processors, 1.5 TB ECC RAM, dual RTX 5090 64 GB VRAM) for local LLM inference, parallel builds, and multi-VM test environments |
 | **External Dependencies** | Atomic Red Team test library (Red Canary, MIT-licensed), Volatility 3 (Volatility Foundation), KAPE (Kroll, Eric Zimmerman), tree-sitter grammars (open-source) |
+
+<p align="center">
+  <img src="Compute/Compute.gif" alt="HotStuff Workstation">
+</p>
 
 ### Cost Analysis
 
