@@ -2,7 +2,7 @@
   <img src="windOH.png" alt="WindOH">
 </p>
 
-**Behavioral telemetry across every surface — monolithic kernels, cloud control planes, firewall appliances, and Kubernetes clusters. Memory forensics at scale. Covert forensic triage. Adversary emulation. One platform, one token model, one answer to the question that matters.**
+**Behavioral telemetry across every surface: monolithic kernels, cloud control planes, firewall appliances, and Kubernetes clusters. Memory forensics at scale. Covert forensic triage. Adversary emulation. One platform, one token model, one answer to the question that matters.**
 
 ---
 
@@ -12,9 +12,9 @@
 
 WindOH is a multi-surface behavioral telemetry platform. It is not a SIEM, not an EDR, and not a dashboard factory. It is a system for answering one question with cryptographic certainty across every environment you operate: **what just happened, and have we ever seen it before?**
 
-Windows NT kernel events. Linux eBPF probes tracing execve through tcp_connect. AWS CloudTrail recording an IAM role assumption in us-east-1. A Palo Alto firewall dropping a packet at the perimeter. A Kubernetes admission controller rejecting a privileged pod. An Azure Sentinel Fusion rule correlating three low-severity alerts into a high-severity incident. All of it flows through the same pipeline — normalized, tokenized, baselined, enriched — and the same question answers across all of it instantaneously.
+Windows NT kernel events. Linux eBPF probes tracing execve through tcp_connect. AWS CloudTrail recording an IAM role assumption in us-east-1. A Palo Alto firewall dropping a packet at the perimeter. A Kubernetes admission controller rejecting a privileged pod. An Azure Sentinel Fusion rule correlating three low-severity alerts into a high-severity incident. All of it flows through the same pipeline (normalized, tokenized, baselined, enriched) and the same question answers across all of it instantaneously.
 
-The platform spans five surfaces today — Windows, Linux, firewall, cloud, and Kubernetes — with macOS, Android, OT/IoT, and SaaS architected. Four components answer the question at different altitudes:
+The platform spans five surfaces today: Windows, Linux, firewall, cloud, and Kubernetes, with macOS, Android, OT/IoT, and SaaS architected. Four components answer the question at different altitudes:
 
 | Component | Role | Scale |
 |---|---|---|
@@ -68,7 +68,7 @@ These are non-negotiable. They are the decision framework for every component, e
 
 **1. Deterministic over heuristic.** Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they do not. There is no confidence score to tune, no threshold to argue about, no training distribution to drift from. This is court-admissible, SIEM-ingestible, and immune to adversarial evasion.
 
-**2. Deploy anywhere -- cloud VPC, on-prem, air-gapped, or hybrid.** The platform runs equally well inside your AWS, Azure, GCP, or Oracle VPC, on bare-metal in your datacenter, or fully air-gapped. Dedicated cloud agents ship for 24 services across 5 providers (AWS 9, Azure 6, GCP 5, Oracle 4, Kubernetes 4) with native credential chains and concurrent API polling — cloud telemetry feeds the same stable token / payload token pipeline as Windows ETW and Linux eBPF events. LLM enrichment targets your own endpoint — llama.cpp, Ollama, vLLM, or any OpenAI-compatible API including cloud-hosted inference — and no telemetry transits the public internet for enrichment under any configuration. The agent buffers to a local SQLite outbox with exponential backoff retry when Elasticsearch is unreachable.
+**2. Deploy anywhere -- cloud VPC, on-prem, air-gapped, or hybrid.** The platform runs equally well inside your AWS, Azure, GCP, or Oracle VPC, on bare-metal in your datacenter, or fully air-gapped. Dedicated cloud agents ship for 24 services across 5 providers (AWS 9, Azure 6, GCP 5, Oracle 4, Kubernetes 4) with native credential chains and concurrent API polling. Cloud telemetry feeds the same stable token / payload token pipeline as Windows ETW and Linux eBPF events. LLM enrichment targets your own endpoint (llama.cpp, Ollama, vLLM, or any OpenAI-compatible API including cloud-hosted inference). No telemetry transits the public internet for enrichment under any configuration. The agent buffers to a local SQLite outbox with exponential backoff retry when Elasticsearch is unreachable.
 
 **3. Observable over opaque.** Every automated decision carries provenance. A rarity band includes the decay score, observation count, and half-life parameters. A Markov anomaly flag includes the transition probability and the expected next behavior. LLM enrichment stores the raw prompt and response alongside the parsed output. The analyst can always inspect the inputs that produced the output.
 
@@ -82,7 +82,7 @@ These are non-negotiable. They are the decision framework for every component, e
 
 ### What Stays Within Your Infrastructure
 
-WindOH is architected for environments where telemetry never leaves the boundary you control — whether that boundary is a cloud VPC, a corporate datacenter, or an air-gapped facility. Cloud agents run inside the same AWS/Azure/GCP/Oracle environment they monitor. On-prem agents run alongside your Windows and Linux fleets. Either way, the same guarantees hold:
+WindOH is architected for environments where telemetry never leaves the boundary you control, whether that boundary is a cloud VPC, a corporate datacenter, or an air-gapped facility. Cloud agents run inside the same AWS/Azure/GCP/Oracle environment they monitor. On-prem agents run alongside your Windows and Linux fleets. Either way, the same guarantees hold:
 
 - All behavioral telemetry. Process command lines, network targets, user identities -- the most sensitive data in a security environment.
 - All LLM enrichment. The prompt goes to your endpoint (local or cloud-hosted). The response goes to your storage. Nothing leaves your infrastructure boundary.
@@ -109,7 +109,7 @@ The LongHorizons agent is designed for environments where **being noticed is a f
 
 - **No silent data loss.** If a buffer fills, it is a diagnosable event. If an export fails, it is retried and tracked. If a dead-letter queue accumulates, it surfaces in the health dashboard. Data loss must be explicit and measurable.
 
-- **Multi-environment by design.** The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- operates on infrastructure you control: your cloud VPC, your datacenter, or your air-gapped network. Pre-built cloud-native agents ship for AWS, Azure, GCP, Oracle, and Kubernetes — deploy directly inside your cloud environment with native credential chains (AWS SDK credential chain, DefaultAzureCredential, GCP Application Default Credentials) and concurrent API polling across 24 services. The same platform that monitors your Windows endpoints simultaneously ingests your cloud control plane audit logs, your Kubernetes API server events, and your firewall flow logs. Internet access is only required for external threat intelligence enrichment (SearXNG), and that is optional.
+- **Multi-environment by design.** The entire pipeline -- agent, Elasticsearch, WindOH API, LLM inference, MongoDB, Redis -- operates on infrastructure you control: your cloud VPC, your datacenter, or your air-gapped network. Pre-built cloud-native agents ship for AWS, Azure, GCP, Oracle, and Kubernetes. Deploy directly inside your cloud environment with native credential chains (AWS SDK credential chain, DefaultAzureCredential, GCP Application Default Credentials) and concurrent API polling across 24 services. The same platform that monitors your Windows endpoints simultaneously ingests your cloud control plane audit logs, your Kubernetes API server events, and your firewall flow logs. Internet access is only required for external threat intelligence enrichment (SearXNG), and that is optional.
 
 ---
 
@@ -295,7 +295,7 @@ The platform is built on a set of explicitly stated engineering principles. Each
 | Principle | Implication |
 |---|---|
 | **Deterministic over heuristic** | Behavioral identity uses SHA-256 hashes, not ML embeddings. Two behaviors either match or they don't. |
-| **Cloud-native and on-prem parity** | The same pipeline runs in your AWS/Azure/GCP/Oracle VPC, on bare-metal, or air-gapped. Dedicated cloud agents poll 24 services across 5 providers with native credential chains. LLM enrichment targets your own endpoint — no telemetry exfiltration path exists regardless of deployment environment. |
+| **Cloud-native and on-prem parity** | The same pipeline runs in your AWS/Azure/GCP/Oracle VPC, on bare-metal, or air-gapped. Dedicated cloud agents poll 24 services across 5 providers with native credential chains. LLM enrichment targets your own endpoint. No telemetry exfiltration path exists regardless of deployment environment. |
 | **Observable over opaque** | Every pipeline stage emits structured diagnostics. Every decision (rarity band, anomaly flag, enrichment) carries provenance -- the inputs that produced it are inspectable. |
 | **Safe-by-default** | Encryption at rest is mandatory. DPAPI-protected master keys. AES-256-GCM with HKDF-derived purpose-specific keys. No plaintext credentials in config files. |
 | **Graceful degradation** | If Elasticsearch is unreachable, the agent buffers to SQLite outbox with retry and dead-letter. If the LLM is unavailable, enrichment queues without data loss. No component failure cascades. |
@@ -747,7 +747,7 @@ cd LongHorizons\releases\windows
 ```
 
 ```bash
-# Linux (musl static — one binary, every distro)
+# Linux (musl static, one binary, every distro)
 cd LongHorizons/releases/linux
 sudo ./wizard install config.toml
 ```
